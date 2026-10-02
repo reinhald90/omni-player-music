@@ -11,6 +11,7 @@ interface PlayerState {
   duration: number
   lyrics: LyricLine[]
   loop: boolean
+  fullMode: boolean
 
   setCurrent: (song: Song) => void
   setQueue: (songs: Song[]) => void
@@ -23,9 +24,11 @@ interface PlayerState {
   setDuration: (d: number) => void
   setLyrics: (l: LyricLine[]) => void
   toggleLoop: () => void
+  openFull: () => void
+  closeFull: () => void
 }
 
-export const usePlayerStore = create<PlayerState>((set, get) => ({
+export const usePlayerStore = create<PlayerState>((set) => ({
   current: null,
   queue: [],
   isPlaying: false,
@@ -35,6 +38,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   duration: 0,
   lyrics: [],
   loop: false,
+  fullMode: false,
 
   setCurrent: (song) =>
     set({
@@ -54,4 +58,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setDuration: (d) => set({ duration: d }),
   setLyrics: (l) => set({ lyrics: l }),
   toggleLoop: () => set((s) => ({ loop: !s.loop })),
+  openFull: () => set({ fullMode: true }),
+  closeFull: () => set({ fullMode: false }),
 }))
