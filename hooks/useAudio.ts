@@ -14,7 +14,6 @@ export function useAudio() {
   const setDuration = usePlayerStore((s) => s.setDuration)
   const pause = usePlayerStore((s) => s.pause)
 
-  // Init audio element
   useEffect(() => {
     if (typeof window === 'undefined') return
     const audio = new Audio()
@@ -31,9 +30,7 @@ export function useAudio() {
         setCurrentTime(0)
       }
     }
-    const handleError = () => {
-      console.error('[Audio] Error:', audio.error?.message)
-    }
+    const handleError = () => console.error('[Audio] Error:', audio.error?.message)
 
     audio.addEventListener('timeupdate', handleTimeUpdate)
     audio.addEventListener('loadedmetadata', handleLoadedMetadata)
@@ -49,33 +46,27 @@ export function useAudio() {
     }
   }, [setCurrentTime, setDuration])
 
-  // Load song ketika current berubah
   useEffect(() => {
     const audio = audioRef.current
     if (!audio || !current) return
 
     const loadAudio = async () => {
       try {
-        // Reset
         audio.pause()
         audio.currentTime = 0
 
-        // Kalau song punya audioUrl langsung, pakai itu
         if (current.audioUrl) {
           audio.src = current.audioUrl
           audio.load()
           return
         }
 
-        // Kalau tidak, fetch dari API stream
         const res = await fetch(`/api/stream?url=${encodeURIComponent(current.url)}`)
         const json = await res.json()
-
         if (!json.success) {
           console.error('[Audio] Gagal ambil stream:', json.error)
           return
         }
-
         audio.src = json.data.audioUrl
         audio.load()
       } catch (e) {
@@ -86,11 +77,9 @@ export function useAudio() {
     loadAudio()
   }, [current])
 
-  // Sync play/pause state
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
-
     if (isPlaying && current) {
       audio.play().catch((e) => {
         console.warn('[Audio] Play blocked:', e.message)
@@ -101,7 +90,6 @@ export function useAudio() {
     }
   }, [isPlaying, current, pause])
 
-  // Sync volume
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
@@ -109,7 +97,6 @@ export function useAudio() {
     audio.muted = muted
   }, [volume, muted])
 
-  // Sync loop
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
