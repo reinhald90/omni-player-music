@@ -6,40 +6,41 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 export async function GET(req: NextRequest) {
-  const videoUrl = req.nextUrl.searchParams.get('url')?.trim()
+  const query = req.nextUrl.searchParams.get('q')?.trim()
 
-  if (!videoUrl) {
-    return NextResponse.json({ success: false, error: 'URL kosong' }, { status: 400 })
+  if (!query) {
+    return NextResponse.json(
+      { success: false, error: 'Parameter "q" (query) wajib diisi' },
+      { status: 400 }
+    )
   }
 
   try {
-    console.log(`[API Stream] Fetch: ${videoUrl}`)
-    const source = await fetchAudioSource(videoUrl)
+    console.log(`[API Stream] Menerima query: "${query}"`)
+    const source = await fetchAudioSource(query)
 
     if (!source) {
-      console.error('[API Stream] ❌ Semua API gagal')
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Semua API downloader gagal. Coba lagu lain atau tunggu sebentar.',
-        },
+        { success: false, error: 'Gagal mendapatkan sumber audio dari API' },
         { status: 502 }
       )
     }
 
-    console.log(`[API Stream] ✅ ${source.name}: ${source.url.slice(0, 80)}...`)
-
     return NextResponse.json({
       success: true,
       data: {
-        provider: source.name,
-        audioUrl: source.url,
+        title: source.title,
+        thumbnail: source.thumbnail,
+        duration: source.duration,
+        source: source.source,
+        audioUrl: source.audioUrl,
+        provider: source.provider,
       },
     })
   } catch (error: any) {
-    console.error('[API Stream]', error)
+    console.error('[API Stream] Error:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Gagal ambil audio' },
+      { success: false, error: error.message || 'Terjadi kesalahan internal' },
       { status: 500 }
     )
   }
