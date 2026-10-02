@@ -1,10 +1,13 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
 
 export function useAudio() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
   const current = usePlayerStore((s) => s.current)
   const isPlaying = usePlayerStore((s) => s.isPlaying)
   const volume = usePlayerStore((s) => s.volume)
@@ -14,81 +17,115 @@ export function useAudio() {
   const setDuration = usePlayerStore((s) => s.setDuration)
   const pause = usePlayerStore((s) => s.pause)
 
+  // Init audio element
   useEffect(() => {
     if (typeof window === 'undefined') return
     const audio = new Audio()
-    audio.preload = 'metadata'
+    audio.preload = 'auto'
     audio.crossOrigin = 'anonymous'
     audioRef.current = audio
 
-    const handleTimeUpdate = () => setCurrentTime(audio.currentTime)
-    const handleLoadedMetadata = () => setDuration(audio.duration || 0)
-    const handleEnded = () => {
+    const onTime = () => setCurrentTime(audio.currentTime)
+    const onMeta = () => {
+      setDuration(audio.duration || 0)
+      setStatus('ready')
+      setErrorMsg(null)
+    }
+    const onPlay = () => setStatus('ready')
+    const onWaiting = () => setStatus('loading')
+    const onEnded = () => {
       if (!usePlayerStore.getState().loop) {
         usePlayerStore.getState().pause()
         audio.currentTime = 0
         setCurrentTime(0)
       }
     }
-    const handleError = () => console.error('[Audio] Error:', audio.error?.message)
+    const onError = () => {
+      setStatus('error')
+      setErrorMsg('Gagal memuat audio. Coba lagu lain.')
+      console.error('[Audio] Error:', audio.error)
+    }
 
-    audio.addEventListener('timeupdate', handleTimeUpdate)
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata)
-    audio.addEventListener('ended', handleEnded)
-    audio.addEventListener('error', handleError)
+    audio.addEventListener('timeupdate', onTime)
+    audio.addEventListener('loadedmetadata', onMeta)
+    audio.addEventListener('play', onPlay)
+    audio.addEventListener('waiting', onWaiting)
+    audio.addEventListener('ended', onEnded)
+    audio.addEventListener('error', onError)
 
     return () => {
       audio.pause()
-      audio.removeEventListener('timeupdate', handleTimeUpdate)
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
-      audio.removeEventListener('ended', handleEnded)
-      audio.removeEventListener('error', handleError)
+      audio.removeEventListener('timeupdate', onTime)
+      audio.removeEventListener('loadedmetadata', onMeta)
+      audio.removeEventListener('play', onPlay)
+      audio.removeEventListener('waiting', onWaiting)
+      audio.removeEventListener('ended', onEnded)
+      audio.removeEventListener('error', onError)
     }
   }, [setCurrentTime, setDuration])
 
+  // Load saat current berubah
   useEffect(() => {
     const audio = audioRef.current
     if (!audio || !current) return
 
-    const loadAudio = async () => {
-      try {
-        audio.pause()
-        audio.currentTime = 0
+    let cancelled = false
 
+    const loadAudio = async () => {
+      setStatus('loading')
+      setErrorMsg(null)
+      audio.pause()
+      audio.removeAttribute('src')
+      audio.load()
+
+      try {
         if (current.audioUrl) {
           audio.src = current.audioUrl
           audio.load()
           return
         }
 
+        const t0 = Date.now()
         const res = await fetch(`/api/stream?url=${encodeURIComponent(current.url)}`)
         const json = await res.json()
+
+        if (cancelled) return
+
         if (!json.success) {
-          console.error('[Audio] Gagal ambil stream:', json.error)
-          return
+          throw new Error(json.error || 'Gagal ambil audio')
         }
+
+        console.log(`[Audio] Stream ready in ${Date.now() - t0}ms via ${json.data.provider}`)
         audio.src = json.data.audioUrl
         audio.load()
-      } catch (e) {
-        console.error('[Audio] Load error:', e)
+      } catch (e: any) {
+        if (cancelled) return
+        console.error('[Audio] Load error:', e.message)
+        setStatus('error')
+        setErrorMsg(e.message || 'Gagal memuat audio')
       }
     }
 
     loadAudio()
+
+    return () => {
+      cancelled = true
+    }
   }, [current])
 
+  // Sync play/pause
   useEffect(() => {
     const audio = audioRef.current
-    if (!audio) return
-    if (isPlaying && current) {
+    if (!audio || !current) return
+
+    if (isPlaying) {
       audio.play().catch((e) => {
         console.warn('[Audio] Play blocked:', e.message)
-        pause()
       })
     } else {
       audio.pause()
     }
-  }, [isPlaying, current, pause])
+  }, [isPlaying, current])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -103,5 +140,5 @@ export function useAudio() {
     audio.loop = loop
   }, [loop])
 
-  return { audio: audioRef.current }
+  return { audio: audioRef.current, status, errorMsg }
 }
