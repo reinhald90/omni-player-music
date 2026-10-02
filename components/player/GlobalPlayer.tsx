@@ -13,29 +13,12 @@ export default function GlobalPlayer() {
   const openFull = usePlayerStore((s) => s.openFull)
   const fullMode = usePlayerStore((s) => s.fullMode)
 
-  const { containerRef, status, errorMsg, seek, seekRelative } = useAudio()
+  const { status, errorMsg, seek, seekRelative } = useAudio()
 
   if (!current) return null
 
   return (
     <>
-      {/* Container tersembunyi untuk YouTube IFrame (ukuran 320x180, di-hide dengan opacity 0) */}
-      <div
-        ref={containerRef}
-        style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          width: '320px',
-          height: '180px',
-          opacity: 0,
-          pointerEvents: 'none',
-          zIndex: -1,
-          overflow: 'hidden',
-        }}
-        aria-hidden="true"
-      />
-
       {fullMode && (
         <FullPlayer
           status={status}
