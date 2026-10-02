@@ -5,12 +5,14 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get('url')
+  const isDownload = req.nextUrl.searchParams.get('download') === '1'
+  const filename = req.nextUrl.searchParams.get('filename') || 'audio.mp3'
+
   if (!url) {
     return new Response('Missing "url" parameter', { status: 400 })
   }
 
   try {
-    // Forward Range header (untuk seek/skip)
     const range = req.headers.get('range')
 
     const upstream = await fetch(url, {
@@ -33,9 +35,20 @@ export async function GET(req: NextRequest) {
     headers.set('Access-Control-Allow-Origin', '*')
     headers.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
     headers.set('Access-Control-Allow-Headers', 'Range')
-    headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges')
+    headers.set(
+      'Access-Control-Expose-Headers',
+      'Content-Length, Content-Range, Accept-Ranges, Content-Disposition'
+    )
     headers.set('Accept-Ranges', 'bytes')
     headers.set('Cache-Control', 'public, max-age=3600')
+
+    if (isDownload) {
+      const safeName = filename.replace(/[^\w\s.-]/g, '_').slice(0, 100)
+      headers.set(
+        'Content-Disposition',
+        `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`
+      )
+    }
 
     const len = upstream.headers.get('content-length')
     if (len) headers.set('Content-Length', len)
