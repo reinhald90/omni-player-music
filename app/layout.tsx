@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { SITE_CONFIG } from '@/lib/constants'
 import Navbar from '@/components/layout/Navbar'
+import GlobalPlayer from '@/components/player/GlobalPlayer'
 
 const inter = Inter({ subsets: ['latin'], display: 'swap' })
 
@@ -36,7 +37,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="id" suppressHydrationWarning>
       <body className={inter.className}>
         <Navbar />
-        <main className="min-h-screen pt-20 pb-32">{children}</main>
+        <main className="min-h-screen pt-20 pb-40">{children}</main>
+        <GlobalPlayer />
       </body>
     </html>
   )
