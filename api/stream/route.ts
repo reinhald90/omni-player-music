@@ -5,25 +5,24 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
+function jsonError(message: string, status: number = 500) {
+  return NextResponse.json({ success: false, error: message }, { status })
+}
+
 export async function GET(req: NextRequest) {
-  const query = req.nextUrl.searchParams.get('q')?.trim()
-
-  if (!query) {
-    return NextResponse.json(
-      { success: false, error: 'Parameter "q" (query) wajib diisi' },
-      { status: 400 }
-    )
-  }
-
   try {
-    console.log(`[API Stream] Menerima query: "${query}"`)
+    const query = req.nextUrl.searchParams.get('q')?.trim()
+
+    if (!query) {
+      return jsonError('Parameter "q" wajib diisi', 400)
+    }
+
+    console.log(`[API Stream] Query: "${query}"`)
+
     const source = await fetchAudioSource(query)
 
     if (!source) {
-      return NextResponse.json(
-        { success: false, error: 'Gagal mendapatkan sumber audio dari API' },
-        { status: 502 }
-      )
+      return jsonError('Semua sumber audio gagal. Coba lagu lain.', 502)
     }
 
     return NextResponse.json({
@@ -38,10 +37,7 @@ export async function GET(req: NextRequest) {
       },
     })
   } catch (error: any) {
-    console.error('[API Stream] Error:', error)
-    return NextResponse.json(
-      { success: false, error: error.message || 'Terjadi kesalahan internal' },
-      { status: 500 }
-    )
+    console.error('[API Stream] Fatal:', error)
+    return jsonError(error?.message || 'Internal error', 500)
   }
 }
