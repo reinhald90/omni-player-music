@@ -1,10 +1,37 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
 
+declare global {
+  interface Window {
+    YT: any
+    onYouTubeIframeAPIReady: () => void
+  }
+}
+
+let ytApiPromise: Promise<any> | null = null
+
+function loadYouTubeApi(): Promise<any> {
+  if (typeof window === 'undefined') return Promise.reject(new Error('SSR'))
+  if (window.YT && window.YT.Player) return Promise.resolve(window.YT)
+  if (ytApiPromise) return ytApiPromise
+
+  ytApiPromise = new Promise((resolve, reject) => {
+    const tag = document.createElement('script')
+    tag.src = 'https://www.youtube.com/iframe_api'
+    tag.onerror = () => reject(new Error('Gagal memuat YouTube API'))
+    document.head.appendChild(tag)
+    window.onYouTubeIframeAPIReady = () => resolve(window.YT)
+    setTimeout(() => reject(new Error('YouTube API timeout')), 15000)
+  })
+  return ytApiPromise
+}
+
 export function useAudio() {
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const playerRef = useRef<any>(null)
+  const initializedRef = useRef(false)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
@@ -17,128 +44,162 @@ export function useAudio() {
   const setDuration = usePlayerStore((s) => s.setDuration)
   const pause = usePlayerStore((s) => s.pause)
 
-  // Init audio element
+  // Init YT Player once
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    const audio = new Audio()
-    audio.preload = 'auto'
-    audio.crossOrigin = 'anonymous'
-    audioRef.current = audio
+    if (initializedRef.current) return
+    let mounted = true
 
-    const onTime = () => setCurrentTime(audio.currentTime)
-    const onMeta = () => {
-      setDuration(audio.duration || 0)
-      setStatus('ready')
-      setErrorMsg(null)
-    }
-    const onPlay = () => setStatus('ready')
-    const onWaiting = () => setStatus('loading')
-    const onEnded = () => {
-      if (!usePlayerStore.getState().loop) {
-        usePlayerStore.getState().pause()
-        audio.currentTime = 0
-        setCurrentTime(0)
-      }
-    }
-    const onError = () => {
-      setStatus('error')
-      setErrorMsg('Gagal memuat audio. Coba lagu lain.')
-      console.error('[Audio] Error:', audio.error)
-    }
-
-    audio.addEventListener('timeupdate', onTime)
-    audio.addEventListener('loadedmetadata', onMeta)
-    audio.addEventListener('play', onPlay)
-    audio.addEventListener('waiting', onWaiting)
-    audio.addEventListener('ended', onEnded)
-    audio.addEventListener('error', onError)
-
-    return () => {
-      audio.pause()
-      audio.removeEventListener('timeupdate', onTime)
-      audio.removeEventListener('loadedmetadata', onMeta)
-      audio.removeEventListener('play', onPlay)
-      audio.removeEventListener('waiting', onWaiting)
-      audio.removeEventListener('ended', onEnded)
-      audio.removeEventListener('error', onError)
-    }
-  }, [setCurrentTime, setDuration])
-
-  // Load saat current berubah
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio || !current) return
-
-    let cancelled = false
-
-    const loadAudio = async () => {
-      setStatus('loading')
-      setErrorMsg(null)
-      audio.pause()
-      audio.removeAttribute('src')
-      audio.load()
-
+    const init = async () => {
       try {
-        if (current.audioUrl) {
-          audio.src = current.audioUrl
-          audio.load()
-          return
-        }
+        const YT = await loadYouTubeApi()
+        if (!mounted || !containerRef.current) return
 
-        const t0 = Date.now()
-        const res = await fetch(`/api/stream?q=${encodeURIComponent(current.title)}`)
-        const json = await res.json()
+        const innerDiv = document.createElement('div')
+        containerRef.current.innerHTML = ''
+        containerRef.current.appendChild(innerDiv)
 
-        if (cancelled) return
+        const player = new YT.Player(innerDiv, {
+          height: '200',
+          width: '200',
+          playerVars: {
+            autoplay: 0,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            modestbranding: 1,
+            rel: 0,
+            playsinline: 1,
+            origin: window.location.origin,
+          },
+          events: {
+            onReady: () => {
+              setStatus('ready')
+            },
+            onStateChange: (e: any) => {
+              // -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 cued
+              if (e.data === 1) setStatus('ready')
+              else if (e.data === 3) setStatus('loading')
+              else if (e.data === 0) {
+                const state = usePlayerStore.getState()
+                if (state.loop && playerRef.current) {
+                  playerRef.current.seekTo(0)
+                  playerRef.current.playVideo()
+                } else {
+                  state.pause()
+                }
+              }
+            },
+            onError: (e: any) => {
+              setStatus('error')
+              setErrorMsg(`YouTube error code: ${e.data}`)
+            },
+          },
+        })
 
-        if (!json.success) {
-          throw new Error(json.error || 'Gagal ambil audio')
-        }
-
-        console.log(`[Audio] Stream ready in ${Date.now() - t0}ms via ${json.data.provider}`)
-        audio.src = json.data.audioUrl
-        audio.load()
+        playerRef.current = player
+        initializedRef.current = true
       } catch (e: any) {
-        if (cancelled) return
-        console.error('[Audio] Load error:', e.message)
+        if (!mounted) return
         setStatus('error')
-        setErrorMsg(e.message || 'Gagal memuat audio')
+        setErrorMsg(e.message || 'Gagal load YouTube')
       }
     }
 
-    loadAudio()
+    init()
 
     return () => {
-      cancelled = true
+      mounted = false
     }
+  }, [])
+
+  // Load video saat current berubah
+  useEffect(() => {
+    if (!playerRef.current || !current) return
+    const player = playerRef.current
+    if (!player.loadVideoById) return
+
+    setStatus('loading')
+    setErrorMsg(null)
+
+    try {
+      if (isPlaying) {
+        player.loadVideoById(current.id)
+      } else {
+        player.cueVideoById(current.id)
+      }
+    } catch (e: any) {
+      setStatus('error')
+      setErrorMsg(e.message)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current])
 
   // Sync play/pause
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio || !current) return
+    if (!playerRef.current || !current) return
+    const player = playerRef.current
+    if (!player.playVideo) return
 
-    if (isPlaying) {
-      audio.play().catch((e) => {
-        console.warn('[Audio] Play blocked:', e.message)
-      })
-    } else {
-      audio.pause()
-    }
+    try {
+      if (isPlaying) {
+        player.playVideo()
+      } else {
+        player.pauseVideo()
+      }
+    } catch {}
   }, [isPlaying, current])
 
+  // Volume
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    audio.volume = volume
-    audio.muted = muted
+    if (!playerRef.current || !playerRef.current.setVolume) return
+    try {
+      playerRef.current.setVolume(Math.round((muted ? 0 : volume) * 100))
+      if (muted) playerRef.current.mute?.()
+      else playerRef.current.unMute?.()
+    } catch {}
   }, [volume, muted])
 
+  // Progress ticker
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    audio.loop = loop
-  }, [loop])
+    const interval = setInterval(() => {
+      const player = playerRef.current
+      if (!player || typeof player.getCurrentTime !== 'function') return
+      try {
+        const t = player.getCurrentTime()
+        const d = player.getDuration()
+        if (typeof t === 'number' && Number.isFinite(t)) setCurrentTime(t)
+        if (typeof d === 'number' && d > 0) setDuration(d)
+      } catch {}
+    }, 500)
+    return () => clearInterval(interval)
+  }, [setCurrentTime, setDuration])
 
-  return { audio: audioRef.current, status, errorMsg }
+  const seek = useCallback(
+    (time: number) => {
+      const player = playerRef.current
+      if (!player || !player.seekTo) return
+      try {
+        player.seekTo(time, true)
+        setCurrentTime(time)
+      } catch {}
+    },
+    [setCurrentTime]
+  )
+
+  const seekRelative = useCallback((delta: number) => {
+    const player = playerRef.current
+    if (!player || !player.getCurrentTime) return
+    try {
+      const t = Math.max(0, player.getCurrentTime() + delta)
+      player.seekTo(t, true)
+    } catch {}
+  }, [])
+
+  return {
+    containerRef,
+    status,
+    errorMsg,
+    seek,
+    seekRelative,
+  }
 }
