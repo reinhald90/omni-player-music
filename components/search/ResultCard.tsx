@@ -1,11 +1,13 @@
 'use client'
 
 import Image from 'next/image'
-import { Play, Clock, Eye, Pause } from 'lucide-react'
+import { useState } from 'react'
+import { Play, Clock, Eye, Pause, MoreVertical, ListPlus, SkipForward, X } from 'lucide-react'
 import type { Song } from '@/types'
 import { usePlayerStore } from '@/store/playerStore'
 import { useHistoryStore } from '@/store/historyStore'
 import { formatViews } from '@/lib/formatter'
+import { clsx } from 'clsx'
 
 interface Props {
   song: Song
@@ -16,17 +18,19 @@ export default function ResultCard({ song }: Props) {
   const isPlaying = usePlayerStore((s) => s.isPlaying)
   const setCurrent = usePlayerStore((s) => s.setCurrent)
   const toggle = usePlayerStore((s) => s.toggle)
+  const addToQueue = usePlayerStore((s) => s.addToQueue)
+  const playNext = usePlayerStore((s) => s.playNext)
   const addHistory = useHistoryStore((s) => s.add)
+
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const isCurrentSong = current?.id === song.id
   const showPause = isCurrentSong && isPlaying
 
   const handlePlay = () => {
     if (isCurrentSong) {
-      // Klik lagu yang sedang aktif → toggle play/pause
       toggle()
     } else {
-      // Lagu baru → set + play + catat history
       setCurrent(song)
       addHistory(song)
     }
@@ -34,9 +38,10 @@ export default function ResultCard({ song }: Props) {
 
   return (
     <div
-      className={`glass rounded-2xl p-3 flex items-center gap-3 transition-all group ${
+      className={clsx(
+        'glass rounded-2xl p-3 flex items-center gap-3 transition-all group relative',
         isCurrentSong ? 'bg-brand/10 border-brand/30' : 'hover:bg-white/[0.06]'
-      }`}
+      )}
     >
       <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden flex-none bg-white/5">
         <Image
@@ -53,7 +58,12 @@ export default function ResultCard({ song }: Props) {
       </div>
 
       <div className="flex-1 min-w-0">
-        <h3 className={`text-sm font-bold truncate leading-snug ${isCurrentSong ? 'text-brand' : ''}`}>
+        <h3
+          className={clsx(
+            'text-sm font-bold truncate leading-snug',
+            isCurrentSong ? 'text-brand' : ''
+          )}
+        >
           {song.title}
         </h3>
         <p className="text-xs text-white/50 truncate mt-1">{song.artist}</p>
@@ -67,10 +77,52 @@ export default function ResultCard({ song }: Props) {
         </div>
       </div>
 
+      {/* Menu button */}
+      <div className="relative flex-none">
+        <button
+          onClick={() => setMenuOpen((v) => !v)}
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 active:scale-90 transition-all"
+          aria-label="Menu"
+        >
+          {menuOpen ? <X size={16} /> : <MoreVertical size={16} />}
+        </button>
+
+        {menuOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setMenuOpen(false)}
+            />
+            <div className="absolute right-0 top-11 z-50 w-44 py-1.5 rounded-2xl glass-strong border border-white/10 shadow-2xl overflow-hidden animate-[fadeIn_0.15s]">
+              <button
+                onClick={() => {
+                  playNext(song)
+                  setMenuOpen(false)
+                }}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-bold text-white/80 hover:bg-white/10 active:bg-white/15 transition-all text-left"
+              >
+                <SkipForward size={14} className="text-brand" />
+                Putar Setelahnya
+              </button>
+              <button
+                onClick={() => {
+                  addToQueue(song)
+                  setMenuOpen(false)
+                }}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-bold text-white/80 hover:bg-white/10 active:bg-white/15 transition-all text-left"
+              >
+                <ListPlus size={14} className="text-cyan-400" />
+                Tambah ke Antrian
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Play button */}
       <button
         onClick={handlePlay}
         className="w-12 h-12 rounded-full bg-gradient-to-br from-brand to-brand-light text-white flex items-center justify-center flex-none shadow-lg shadow-brand/40 hover:scale-110 active:scale-95 transition-all"
-        aria-label={showPause ? 'Pause' : 'Play'}
       >
         {showPause ? (
           <Pause size={18} fill="currentColor" />
