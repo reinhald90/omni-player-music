@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -135,6 +136,18 @@ body {
   }
 }
 
+@keyframes dotPulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.35);
+    opacity: 0.65;
+  }
+}
+
 /* ============ AUDIO ELEMENT ============ */
 audio {
   display: none;
@@ -156,7 +169,7 @@ input[type='range']::-moz-range-thumb {
   border: 0;
 }
 
-/* ============ SAFE AREA (untuk iPhone notch) ============ */
+/* ============ SAFE AREA (iPhone notch) ============ */
 .safe-top {
   padding-top: env(safe-area-inset-top, 0);
 }
@@ -165,7 +178,7 @@ input[type='range']::-moz-range-thumb {
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
-/* ============ PREVENT TEXT SELECTION DI PLAYER ============ */
+/* ============ PREVENT TEXT SELECTION ============ */
 .no-select {
   user-select: none;
   -webkit-user-select: none;
@@ -191,16 +204,4 @@ input[type='range']::-moz-range-thumb {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
-  
-/* ============ LOADING SCREEN ============ */
-@keyframes dotPulse {
-  0%, 100% {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: translate(-50%, -50%) scale(1.35);
-    opacity: 0.65;
-  }
 }
-
