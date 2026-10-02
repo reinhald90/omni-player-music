@@ -2,10 +2,21 @@
 
 import Image from 'next/image'
 import { useState } from 'react'
-import { Play, Clock, Eye, Pause, MoreVertical, ListPlus, SkipForward, X } from 'lucide-react'
+import {
+  Play,
+  Clock,
+  Eye,
+  Pause,
+  MoreVertical,
+  ListPlus,
+  SkipForward,
+  X,
+  Heart,
+} from 'lucide-react'
 import type { Song } from '@/types'
 import { usePlayerStore } from '@/store/playerStore'
 import { useHistoryStore } from '@/store/historyStore'
+import { useFavoritesStore } from '@/store/favoritesStore'
 import { formatViews } from '@/lib/formatter'
 import { clsx } from 'clsx'
 
@@ -21,6 +32,9 @@ export default function ResultCard({ song }: Props) {
   const addToQueue = usePlayerStore((s) => s.addToQueue)
   const playNext = usePlayerStore((s) => s.playNext)
   const addHistory = useHistoryStore((s) => s.add)
+
+  const isFav = useFavoritesStore((s) => s.isFavorite(song.id))
+  const toggleFav = useFavoritesStore((s) => s.toggle)
 
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -55,6 +69,22 @@ export default function ResultCard({ song }: Props) {
         <div className="absolute bottom-1 right-1 text-[9px] font-black bg-black/80 px-1.5 py-0.5 rounded text-white/90">
           {song.duration}
         </div>
+        {/* Favorite overlay button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            toggleFav(song)
+          }}
+          className={clsx(
+            'absolute top-1 left-1 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all active:scale-90',
+            isFav
+              ? 'bg-brand/90 text-white'
+              : 'bg-black/50 text-white/70 hover:bg-black/70 hover:text-white opacity-0 group-hover:opacity-100'
+          )}
+          aria-label="Favorit"
+        >
+          <Heart size={13} fill={isFav ? 'currentColor' : 'none'} />
+        </button>
       </div>
 
       <div className="flex-1 min-w-0">
@@ -89,17 +119,14 @@ export default function ResultCard({ song }: Props) {
 
         {menuOpen && (
           <>
-            <div
-              className="fixed inset-0 z-40"
-              onClick={() => setMenuOpen(false)}
-            />
+            <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
             <div className="absolute right-0 top-11 z-50 w-44 py-1.5 rounded-2xl glass-strong border border-white/10 shadow-2xl overflow-hidden animate-[fadeIn_0.15s]">
               <button
                 onClick={() => {
                   playNext(song)
                   setMenuOpen(false)
                 }}
-                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-bold text-white/80 hover:bg-white/10 active:bg-white/15 transition-all text-left"
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-bold text-white/80 hover:bg-white/10 text-left"
               >
                 <SkipForward size={14} className="text-brand" />
                 Putar Setelahnya
@@ -109,10 +136,25 @@ export default function ResultCard({ song }: Props) {
                   addToQueue(song)
                   setMenuOpen(false)
                 }}
-                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-bold text-white/80 hover:bg-white/10 active:bg-white/15 transition-all text-left"
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-bold text-white/80 hover:bg-white/10 text-left"
               >
                 <ListPlus size={14} className="text-cyan-400" />
                 Tambah ke Antrian
+              </button>
+              <button
+                onClick={() => {
+                  toggleFav(song)
+                  setMenuOpen(false)
+                }}
+                className={clsx(
+                  'w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-bold text-left',
+                  isFav
+                    ? 'text-red-400 hover:bg-red-500/10'
+                    : 'text-white/80 hover:bg-white/10'
+                )}
+              >
+                <Heart size={14} fill={isFav ? 'currentColor' : 'none'} />
+                {isFav ? 'Hapus dari Favorit' : 'Tambah ke Favorit'}
               </button>
             </div>
           </>
