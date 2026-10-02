@@ -14,6 +14,7 @@ export const SITE_CONFIG = {
     { label: 'Favorit', href: '/favorites' },
     { label: 'History', href: '/history' },
     { label: 'About', href: '/about' },
+    { label: 'Channel', href: '/channel' },
   ],
 }
 
