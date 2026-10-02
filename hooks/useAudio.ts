@@ -86,7 +86,7 @@ export function useAudio() {
         }
 
         const t0 = Date.now()
-        const res = await fetch(`/api/stream?url=${encodeURIComponent(current.url)}`)
+        const res = await fetch(`/api/stream?q=${encodeURIComponent(current.title)}`)
         const json = await res.json()
 
         if (cancelled) return
