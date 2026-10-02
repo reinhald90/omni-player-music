@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
 import { generateFallbackLyrics } from '@/lib/lyrics'
 import { clsx } from 'clsx'
+import { RotateCcw, Minus, Plus } from 'lucide-react'
 
 export default function Lyrics() {
   const current = usePlayerStore((s) => s.current)
@@ -11,8 +12,10 @@ export default function Lyrics() {
   const duration = usePlayerStore((s) => s.duration)
   const lyrics = usePlayerStore((s) => s.lyrics)
   const lyricsDuration = usePlayerStore((s) => s.lyricsDuration)
+  const lyricsOffset = usePlayerStore((s) => s.lyricsOffset)
   const setLyrics = usePlayerStore((s) => s.setLyrics)
   const setLyricsDuration = usePlayerStore((s) => s.setLyricsDuration)
+  const setLyricsOffset = usePlayerStore((s) => s.setLyricsOffset)
   const [loading, setLoading] = useState(false)
 
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -69,22 +72,19 @@ export default function Lyrics() {
   }, [current, setLyrics, setLyricsDuration])
 
   // === SCALE FACTOR ===
-  // Kalau durasi lrclib beda jauh dengan durasi audio asli, kita scale
-  // Contoh: lrclib 180s, audio 218s → scale = 218/180 = 1.21
-  // Artinya setiap timestamp lirik dikali 1.21 biar match
   const scaleFactor = useMemo(() => {
     if (!duration || duration <= 0) return 1
     if (!lyricsDuration || lyricsDuration <= 0) return 1
     const diff = Math.abs(lyricsDuration - duration)
-    // Kalau beda < 3 detik, gak perlu scale
     if (diff < 3) return 1
-    // Kalau beda > 60 detik, kemungkinan lagu beda versi → tetap scale biar proporsional
     return duration / lyricsDuration
   }, [duration, lyricsDuration])
 
-  // === ADJUSTED TIME ===
-  // currentTime * scaleFactor = waktu di timeline lirik asli
-  const adjustedTime = currentTime * scaleFactor
+  // === ADJUSTED TIME — sekarang dengan offset juga ===
+  // adjustedTime = currentTime * scale - offset
+  // offset positif = lirik mundur (delay)
+  // offset negatif = lirik maju (cepetin)
+  const adjustedTime = currentTime * scaleFactor - lyricsOffset
 
   // === ACTIVE INDEX ===
   const activeIdx = useMemo(() => {
@@ -132,32 +132,103 @@ export default function Lyrics() {
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="w-full h-full overflow-y-auto px-6 scroll-smooth
-        [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]
-        [mask-image:linear-gradient(180deg,transparent_0%,#000_20%,#000_80%,transparent_100%)]
-        [-webkit-mask-image:linear-gradient(180deg,transparent_0%,#000_20%,#000_80%,transparent_100%)]"
-    >
-      <div className="py-[35%] flex flex-col gap-4">
-        {lyrics.map((line, i) => (
-          <div
-            key={i}
-            ref={(el) => {
-              lineRefs.current[i] = el
-            }}
-            className={clsx(
-              'transition-all duration-300 leading-snug',
-              i === activeIdx
-                ? 'text-white text-[15px] font-bold scale-[1.02]'
-                : i < activeIdx
-                  ? 'text-white/25 text-[13px] font-semibold'
-                  : 'text-white/45 text-[13px] font-semibold'
-            )}
+    <div className="w-full h-full flex flex-col">
+      {/* === SCROLL AREA === */}
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-y-auto px-6 scroll-smooth
+          [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]
+          [mask-image:linear-gradient(180deg,transparent_0%,#000_15%,#000_85%,transparent_100%)]
+          [-webkit-mask-image:linear-gradient(180deg,transparent_0%,#000_15%,#000_85%,transparent_100%)]"
+      >
+        <div className="py-[35%] flex flex-col gap-4">
+          {lyrics.map((line, i) => (
+            <div
+              key={i}
+              ref={(el) => {
+                lineRefs.current[i] = el
+              }}
+              className={clsx(
+                'transition-all duration-300 leading-snug',
+                i === activeIdx
+                  ? 'text-white text-[15px] font-bold scale-[1.02]'
+                  : i < activeIdx
+                    ? 'text-white/25 text-[13px] font-semibold'
+                    : 'text-white/45 text-[13px] font-semibold'
+              )}
+            >
+              {line.text}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* === OFFSET CONTROL === */}
+      <div className="flex-none px-3 pb-3 pt-1">
+        <div className="glass-strong rounded-2xl p-2.5 flex items-center gap-2">
+          <button
+            onClick={() => setLyricsOffset(Math.max(-30, lyricsOffset - 0.5))}
+            className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/70 active:scale-90 transition-all flex-none"
+            aria-label="Mundurkan lirik"
           >
-            {line.text}
+            <Minus size={14} />
+          </button>
+
+          <div className="flex-1 min-w-0">
+            <div className="text-center mb-1">
+              <span
+                className={clsx(
+                  'text-[10px] font-black tracking-wider tabular-nums',
+                  Math.abs(lyricsOffset) < 0.05
+                    ? 'text-white/40'
+                    : lyricsOffset > 0
+                      ? 'text-amber-400'
+                      : 'text-cyan-400'
+                )}
+              >
+                {lyricsOffset > 0
+                  ? `Lirik mundur ${lyricsOffset.toFixed(1)}s`
+                  : lyricsOffset < 0
+                    ? `Lirik maju ${Math.abs(lyricsOffset).toFixed(1)}s`
+                    : 'Offset: 0.0s (pas)'}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={-15}
+              max={15}
+              step={0.1}
+              value={lyricsOffset}
+              onChange={(e) => setLyricsOffset(parseFloat(e.target.value))}
+              className="w-full h-[3px] bg-white/15 rounded-full appearance-none cursor-pointer
+                [&::-webkit-slider-thumb]:appearance-none
+                [&::-webkit-slider-thumb]:w-3
+                [&::-webkit-slider-thumb]:h-3
+                [&::-webkit-slider-thumb]:rounded-full
+                [&::-webkit-slider-thumb]:bg-white
+                [&::-webkit-slider-thumb]:shadow-[0_0_8px_rgba(0,0,0,0.5)]"
+            />
           </div>
-        ))}
+
+          <button
+            onClick={() => setLyricsOffset(Math.min(30, lyricsOffset + 0.5))}
+            className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/70 active:scale-90 transition-all flex-none"
+            aria-label="Percepat lirik"
+          >
+            <Plus size={14} />
+          </button>
+
+          <button
+            onClick={() => setLyricsOffset(0)}
+            className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/70 active:scale-90 transition-all flex-none"
+            aria-label="Reset offset"
+          >
+            <RotateCcw size={13} />
+          </button>
+        </div>
+        <p className="text-center text-[9px] text-white/30 mt-1.5 font-medium">
+          Geser kalau lirik tidak pas
+        </p>
       </div>
     </div>
   )
