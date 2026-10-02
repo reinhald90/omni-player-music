@@ -1,206 +1,66 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+'use client'
 
-:root {
-  --brand: #ff2d55;
-  --brand-light: #ff6b9d;
-  --brand-dark: #c084fc;
-  --bg: #050505;
-  --surface: #0a0a0a;
-}
+import { useState } from 'react'
+import SearchBar from '@/components/search/SearchBar'
+import ResultList from '@/components/search/ResultList'
+import type { Song } from '@/types'
+import { Sparkles } from 'lucide-react'
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-}
+export default function HomePage() {
+  const [results, setResults] = useState<Song[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [searched, setSearched] = useState(false)
 
-html,
-body {
-  background: var(--bg);
-  color: #fff;
-  font-family: 'Inter', -apple-system, system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
-  scroll-behavior: smooth;
-}
-
-/* ============ SCROLLBAR ============ */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-/* ============ SELECTION ============ */
-::selection {
-  background: var(--brand);
-  color: #fff;
-}
-
-/* ============ UTILITY CLASSES ============ */
-.glass {
-  background: rgba(255, 255, 255, 0.035);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.glass-strong {
-  background: rgba(15, 15, 15, 0.85);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.gradient-text {
-  background: linear-gradient(90deg, #fff, #ff9ec2 55%, #ff2d55);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-}
-
-.glow-brand {
-  box-shadow: 0 0 24px rgba(255, 45, 85, 0.45);
-}
-
-/* ============ ANIMATIONS ============ */
-@keyframes slideUp {
-  from {
-    transform: translateY(100%);
+  const handleSearch = async (q: string) => {
+    setLoading(true)
+    setError(null)
+    setSearched(true)
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error || 'Gagal mencari')
+      setResults(json.data || [])
+    } catch (e: any) {
+      setError(e.message)
+      setResults([])
+    } finally {
+      setLoading(false)
+    }
   }
-  to {
-    transform: translateY(0);
-  }
-}
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-8">
+      {/* Hero */}
+      <div className="text-center mb-8">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass mb-4">
+          <Sparkles size={12} className="text-brand" />
+          <span className="text-[10px] font-black tracking-[0.2em] uppercase text-white/70">
+            Premium Music Player
+          </span>
+        </div>
+        <h1 className="text-3xl sm:text-4xl font-black gradient-text mb-2">
+          Omni Player Music
+        </h1>
+        <p className="text-sm text-white/50">
+          Streaming, lirik, dan riwayat — semua di satu tempat 🎧
+        </p>
+      </div>
 
-@keyframes pulse-dot {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.4;
-    transform: scale(0.7);
-  }
-}
+      {/* Search */}
+      <div className="mb-8">
+        <SearchBar onSearch={handleSearch} loading={loading} />
+      </div>
 
-@keyframes beat {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.22);
-  }
-}
+      {/* Results */}
+      <ResultList results={results} loading={loading} error={error} />
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-@keyframes dotPulse {
-  0%,
-  100% {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: translate(-50%, -50%) scale(1.35);
-    opacity: 0.65;
-  }
-}
-
-/* ============ AUDIO ELEMENT ============ */
-audio {
-  display: none;
-}
-
-/* ============ INPUT RANGE ============ */
-input[type='range'] {
-  -webkit-appearance: none;
-  appearance: none;
-  background: transparent;
-}
-
-input[type='range']::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-input[type='range']::-moz-range-thumb {
-  border: 0;
-}
-
-/* ============ SAFE AREA (iPhone notch) ============ */
-.safe-top {
-  padding-top: env(safe-area-inset-top, 0);
-}
-
-.safe-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 0);
-}
-
-/* ============ PREVENT TEXT SELECTION ============ */
-.no-select {
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-/* ============ SKELETON LOADER ============ */
-.skeleton {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.03) 25%,
-    rgba(255, 255, 255, 0.08) 50%,
-    rgba(255, 255, 255, 0.03) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-}
-
-/* ============ REDUCED MOTION ============ */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
+      {/* Empty state awal */}
+      {!searched && !loading && (
+        <div className="text-center text-white/30 text-xs mt-16">
+          <p>Mulai dengan mencari lagu di atas ✨</p>
+        </div>
+      )}
+    </div>
+  )
 }
