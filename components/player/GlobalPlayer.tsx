@@ -19,16 +19,17 @@ export default function GlobalPlayer() {
 
   return (
     <>
-      {/* Container tersembunyi untuk YouTube IFrame */}
+      {/* Container tersembunyi untuk YouTube IFrame (ukuran 320x180, di-hide dengan opacity 0) */}
       <div
         ref={containerRef}
-        className="fixed pointer-events-none"
         style={{
+          position: 'fixed',
           bottom: 0,
           left: 0,
-          width: 1,
-          height: 1,
-          opacity: 0.01,
+          width: '320px',
+          height: '180px',
+          opacity: 0,
+          pointerEvents: 'none',
           zIndex: -1,
           overflow: 'hidden',
         }}
