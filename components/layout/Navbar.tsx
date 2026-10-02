@@ -4,11 +4,12 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { SITE_CONFIG } from '@/lib/constants'
-import { Home, History, Info, Radio } from 'lucide-react'
+import { Home, History, Info, Radio, Heart } from 'lucide-react'
 import { clsx } from 'clsx'
 
 const icons: Record<string, React.ReactNode> = {
   '/': <Home size={18} />,
+  '/favorites': <Heart size={18} />,
   '/history': <History size={18} />,
   '/about': <Info size={18} />,
   '/channel': <Radio size={18} />,
@@ -19,9 +20,9 @@ export default function Navbar() {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 glass-strong border-b border-white/5">
-      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 h-16 flex items-center justify-between gap-2">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5 group">
+        <Link href="/" className="flex items-center gap-2.5 group flex-none">
           <div className="relative w-9 h-9 rounded-full overflow-hidden shadow-lg shadow-brand/30 flex-none ring-1 ring-white/10 group-hover:scale-105 transition-transform">
             <Image
               src="/icon.png"
@@ -42,8 +43,14 @@ export default function Navbar() {
           </div>
         </Link>
 
-        {/* Menu */}
-        <div className="flex items-center gap-1">
+        {/* Menu — bisa di-scroll horizontal di HP */}
+        <div
+          className="flex items-center gap-1 overflow-x-auto"
+          style={{
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+          }}
+        >
           {SITE_CONFIG.nav.map((item) => {
             const active = pathname === item.href
             return (
@@ -51,7 +58,7 @@ export default function Navbar() {
                 key={item.href}
                 href={item.href}
                 className={clsx(
-                  'flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all',
+                  'flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold transition-all flex-none',
                   active
                     ? 'bg-brand/15 text-brand border border-brand/30'
                     : 'text-white/60 hover:text-white hover:bg-white/5 border border-transparent'
