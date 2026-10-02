@@ -3,6 +3,7 @@ module.exports = {
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
+    './lib/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
@@ -15,8 +16,6 @@ module.exports = {
         surface: {
           DEFAULT: '#0a0a0a',
           soft: '#121212',
-          card: 'rgba(255,255,255,0.035)',
-          border: 'rgba(255,255,255,0.06)',
         },
       },
       fontFamily: {
