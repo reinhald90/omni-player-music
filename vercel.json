@@ -10,13 +10,6 @@
     "app/api/stream/route.ts": {
       "maxDuration": 60,
       "memory": 1024
-    },
-    "app/api/lyrics/route.ts": {
-      "maxDuration": 15
-    },
-    "app/api/download/route.ts": {
-      "maxDuration": 60,
-      "memory": 1024
     }
   }
 }
