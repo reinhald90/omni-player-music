@@ -1,0 +1,22 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "regions": ["sin1"],
+  "functions": {
+    "app/api/search/route.ts": {
+      "maxDuration": 30,
+      "memory": 1024
+    },
+    "app/api/stream/route.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "app/api/lyrics/route.ts": {
+      "maxDuration": 15
+    },
+    "app/api/download/route.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  }
+}
