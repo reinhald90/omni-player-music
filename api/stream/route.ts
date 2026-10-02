@@ -13,13 +13,21 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    console.log(`[API Stream] Fetch: ${videoUrl}`)
     const source = await fetchAudioSource(videoUrl)
+
     if (!source) {
+      console.error('[API Stream] ❌ Semua API gagal')
       return NextResponse.json(
-        { success: false, error: 'Semua API downloader gagal' },
+        {
+          success: false,
+          error: 'Semua API downloader gagal. Coba lagu lain atau tunggu sebentar.',
+        },
         { status: 502 }
       )
     }
+
+    console.log(`[API Stream] ✅ ${source.name}: ${source.url.slice(0, 80)}...`)
 
     return NextResponse.json({
       success: true,
