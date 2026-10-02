@@ -12,9 +12,17 @@ interface PlayerState {
   lyrics: LyricLine[]
   loop: boolean
   fullMode: boolean
+  sleepEnd: number | null
+  sleepMin: number
 
   setCurrent: (song: Song) => void
   setQueue: (songs: Song[]) => void
+  addToQueue: (song: Song) => void
+  playNext: (song: Song) => void
+  removeFromQueue: (idx: number) => void
+  clearQueue: () => void
+  next: () => void
+  prev: () => void
   play: () => void
   pause: () => void
   toggle: () => void
@@ -26,9 +34,11 @@ interface PlayerState {
   toggleLoop: () => void
   openFull: () => void
   closeFull: () => void
+  startSleep: (min: number) => void
+  cancelSleep: () => void
 }
 
-export const usePlayerStore = create<PlayerState>((set) => ({
+export const usePlayerStore = create<PlayerState>((set, get) => ({
   current: null,
   queue: [],
   isPlaying: false,
@@ -39,6 +49,8 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   lyrics: [],
   loop: false,
   fullMode: false,
+  sleepEnd: null,
+  sleepMin: 0,
 
   setCurrent: (song) =>
     set({
@@ -49,6 +61,31 @@ export const usePlayerStore = create<PlayerState>((set) => ({
       isPlaying: true,
     }),
   setQueue: (songs) => set({ queue: songs }),
+  addToQueue: (song) => {
+    const q = get().queue
+    if (q.some((s) => s.id === song.id)) return
+    set({ queue: [...q, song] })
+  },
+  playNext: (song) => {
+    const q = get().queue.filter((s) => s.id !== song.id)
+    set({ queue: [song, ...q] })
+  },
+  removeFromQueue: (idx) => set({ queue: get().queue.filter((_, i) => i !== idx) }),
+  clearQueue: () => set({ queue: [] }),
+  next: () => {
+    const { queue, current } = get()
+    if (!queue.length) return
+    const idx = current ? queue.findIndex((s) => s.id === current.id) : -1
+    const nextSong = queue[idx + 1] || queue[0]
+    if (nextSong) get().setCurrent(nextSong)
+  },
+  prev: () => {
+    const { queue, current } = get()
+    if (!queue.length) return
+    const idx = current ? queue.findIndex((s) => s.id === current.id) : 0
+    const prevSong = queue[idx - 1] || queue[queue.length - 1]
+    if (prevSong) get().setCurrent(prevSong)
+  },
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
   toggle: () => set((s) => ({ isPlaying: !s.isPlaying })),
@@ -60,4 +97,9 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   toggleLoop: () => set((s) => ({ loop: !s.loop })),
   openFull: () => set({ fullMode: true }),
   closeFull: () => set({ fullMode: false }),
+  startSleep: (min) => {
+    const end = Date.now() + min * 60 * 1000
+    set({ sleepEnd: end, sleepMin: min })
+  },
+  cancelSleep: () => set({ sleepEnd: null, sleepMin: 0 }),
 }))
