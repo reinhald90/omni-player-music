@@ -4,6 +4,7 @@ import './globals.css'
 import { SITE_CONFIG } from '@/lib/constants'
 import Navbar from '@/components/layout/Navbar'
 import GlobalPlayer from '@/components/player/GlobalPlayer'
+import LoadingScreen from '@/components/layout/LoadingScreen'
 
 const inter = Inter({ subsets: ['latin'], display: 'swap' })
 
@@ -27,17 +28,11 @@ export const metadata: Metadata = {
     'pemutar musik online',
     'gratis',
   ],
-
-  // === ICON & FAVICON — pakai icon.png (kotak) ===
   icons: {
-    icon: [
-      { url: '/icon.png', type: 'image/png', sizes: '512x512' },
-    ],
+    icon: [{ url: '/icon.png', type: 'image/png', sizes: '512x512' }],
     shortcut: '/icon.png',
     apple: [{ url: '/icon.png', sizes: '512x512' }],
   },
-
-  // === OPENGRAPH — pakai logo.png (landscape) ===
   openGraph: {
     type: 'website',
     locale: 'id_ID',
@@ -55,17 +50,13 @@ export const metadata: Metadata = {
       },
     ],
   },
-
-  // === TWITTER / X ===
   twitter: {
     card: 'summary_large_image',
     title: `${SITE_CONFIG.name} — Premium Music Player`,
     description: SITE_CONFIG.description,
     images: ['/logo.png'],
   },
-
   manifest: '/manifest.json',
-
   robots: {
     index: true,
     follow: true,
@@ -98,6 +89,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="msapplication-TileImage" content="/icon.png" />
       </head>
       <body className={inter.className}>
+        <LoadingScreen />
         <Navbar />
         <main className="min-h-screen pt-20 pb-40">{children}</main>
         <GlobalPlayer />
