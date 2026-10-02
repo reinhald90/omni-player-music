@@ -5,18 +5,25 @@ import { useRef, useState } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
 import { formatTime } from '@/lib/formatter'
 import {
-  ChevronDown, Play, Pause, SkipBack, SkipForward,
-  Repeat, Shuffle, Volume2,
+  ChevronDown,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Repeat,
+  Shuffle,
+  Volume2,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
 interface Props {
-  audio: HTMLAudioElement | null
   status: 'idle' | 'loading' | 'ready' | 'error'
   errorMsg: string | null
+  onSeek: (time: number) => void
+  onSeekRelative: (delta: number) => void
 }
 
-export default function FullPlayer({ audio, status, errorMsg }: Props) {
+export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }: Props) {
   const current = usePlayerStore((s) => s.current)
   const isPlaying = usePlayerStore((s) => s.isPlaying)
   const currentTime = usePlayerStore((s) => s.currentTime)
@@ -28,7 +35,6 @@ export default function FullPlayer({ audio, status, errorMsg }: Props) {
   const closeFull = usePlayerStore((s) => s.closeFull)
   const setVolume = usePlayerStore((s) => s.setVolume)
   const toggleLoop = usePlayerStore((s) => s.toggleLoop)
-  const setCurrentTime = usePlayerStore((s) => s.setCurrentTime)
 
   const barRef = useRef<HTMLDivElement | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -38,7 +44,7 @@ export default function FullPlayer({ audio, status, errorMsg }: Props) {
 
   const progress = duration > 0 ? ((dragging ? dragTime : currentTime) / duration) * 100 : 0
 
-  const handleSeek = (clientX: number) => {
+  const getTimeFromEvent = (clientX: number) => {
     if (!barRef.current || !duration) return 0
     const rect = barRef.current.getBoundingClientRect()
     const px = Math.max(0, Math.min(clientX - rect.left, rect.width))
@@ -47,52 +53,54 @@ export default function FullPlayer({ audio, status, errorMsg }: Props) {
 
   const onPointerDown = (e: React.PointerEvent) => {
     setDragging(true)
-    setDragTime(handleSeek(e.clientX))
+    setDragTime(getTimeFromEvent(e.clientX))
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
   }
   const onPointerMove = (e: React.PointerEvent) => {
     if (!dragging) return
-    setDragTime(handleSeek(e.clientX))
+    setDragTime(getTimeFromEvent(e.clientX))
   }
   const onPointerUp = (e: React.PointerEvent) => {
     if (!dragging) return
-    const t = handleSeek(e.clientX)
-    if (audio) {
-      audio.currentTime = t
-      setCurrentTime(t)
-    }
+    const t = getTimeFromEvent(e.clientX)
+    onSeek(t)
     setDragging(false)
     ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
   }
 
-  const seekRelative = (delta: number) => {
-    if (!audio) return
-    const t = Math.max(0, Math.min(audio.duration || 0, audio.currentTime + delta))
-    audio.currentTime = t
-    setCurrentTime(t)
-  }
-
   return (
     <div className="fixed inset-0 z-[60] flex flex-col">
+      {/* Ambient background */}
       <div className="absolute inset-0 -z-10">
-        <Image src={current.thumbnail} alt="" fill className="object-cover scale-150 blur-[120px] opacity-40 saturate-200" />
+        <Image
+          src={current.thumbnail}
+          alt=""
+          fill
+          sizes="100vw"
+          className="object-cover scale-150 blur-[120px] opacity-40 saturate-200"
+        />
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/70 to-black" />
       </div>
 
+      {/* Header */}
       <div className="flex items-center justify-between px-5 pt-5 pb-3">
         <button
           onClick={closeFull}
           className="w-10 h-10 rounded-full flex items-center justify-center bg-white/5 border border-white/10 text-white hover:bg-white/10 transition"
+          aria-label="Close"
         >
           <ChevronDown size={20} />
         </button>
         <div className="text-center flex-1 min-w-0">
-          <div className="text-[9px] font-black tracking-[0.3em] uppercase text-brand">● Now Playing</div>
+          <div className="text-[9px] font-black tracking-[0.3em] uppercase text-brand">
+            ● Now Playing
+          </div>
           <div className="text-[10px] text-white/50 mt-1 truncate">{current.artist}</div>
         </div>
         <div className="w-10 h-10" />
       </div>
 
+      {/* Cover */}
       <div className="flex-1 flex flex-col justify-center px-6 py-4 min-h-0">
         <div className="relative w-full aspect-square max-w-md mx-auto rounded-3xl overflow-hidden shadow-[0_30px_80px_-20px_rgba(255,45,85,0.4),0_20px_40px_-10px_rgba(0,0,0,0.9)]">
           <Image
@@ -111,6 +119,7 @@ export default function FullPlayer({ audio, status, errorMsg }: Props) {
         </div>
       </div>
 
+      {/* Info + Controls */}
       <div className="px-6 pb-8 space-y-5">
         <div className="text-center">
           <h2 className="text-xl font-black truncate px-4">{current.title}</h2>
@@ -120,6 +129,7 @@ export default function FullPlayer({ audio, status, errorMsg }: Props) {
           )}
         </div>
 
+        {/* Progress */}
         <div>
           <div
             ref={barRef}
@@ -145,13 +155,23 @@ export default function FullPlayer({ audio, status, errorMsg }: Props) {
           </div>
         </div>
 
+        {/* Controls */}
         <div className="flex items-center justify-between">
-          <button className="p-2 text-white/40 hover:text-white transition"><Shuffle size={20} /></button>
-          <button onClick={() => seekRelative(-10)} className="p-2 text-white/70 hover:text-white transition"><SkipBack size={24} /></button>
+          <button className="p-2 text-white/40 hover:text-white transition" aria-label="Shuffle">
+            <Shuffle size={20} />
+          </button>
+          <button
+            onClick={() => onSeekRelative(-10)}
+            className="p-2 text-white/70 hover:text-white transition"
+            aria-label="Rewind"
+          >
+            <SkipBack size={24} />
+          </button>
           <button
             onClick={toggle}
             disabled={status === 'loading'}
             className="w-16 h-16 rounded-full bg-white text-black flex items-center justify-center shadow-[0_15px_40px_-10px_rgba(255,45,85,0.7)] hover:scale-105 active:scale-95 transition-transform disabled:opacity-50"
+            aria-label={isPlaying ? 'Pause' : 'Play'}
           >
             {status === 'loading' ? (
               <div className="w-6 h-6 border-2 border-black/20 border-t-black rounded-full animate-spin" />
@@ -161,15 +181,23 @@ export default function FullPlayer({ audio, status, errorMsg }: Props) {
               <Play size={26} fill="currentColor" className="ml-1" />
             )}
           </button>
-          <button onClick={() => seekRelative(10)} className="p-2 text-white/70 hover:text-white transition"><SkipForward size={24} /></button>
+          <button
+            onClick={() => onSeekRelative(10)}
+            className="p-2 text-white/70 hover:text-white transition"
+            aria-label="Forward"
+          >
+            <SkipForward size={24} />
+          </button>
           <button
             onClick={toggleLoop}
             className={clsx('p-2 transition', loop ? 'text-brand' : 'text-white/40 hover:text-white')}
+            aria-label="Loop"
           >
             <Repeat size={20} />
           </button>
         </div>
 
+        {/* Volume */}
         <div className="flex items-center gap-3 pt-1">
           <Volume2 size={16} className="text-white/40 flex-none" />
           <input
