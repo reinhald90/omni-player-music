@@ -3,8 +3,10 @@
 import Image from 'next/image'
 import { usePlayerStore } from '@/store/playerStore'
 import { useAudio } from '@/hooks/useAudio'
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { Play, Pause } from 'lucide-react'
 import FullPlayer from './FullPlayer'
+import Visualizer from './Visualizer'
 
 export default function GlobalPlayer() {
   const current = usePlayerStore((s) => s.current)
@@ -14,6 +16,7 @@ export default function GlobalPlayer() {
   const fullMode = usePlayerStore((s) => s.fullMode)
 
   const { status, errorMsg, seek, seekRelative } = useAudio()
+  useKeyboardShortcuts()
 
   if (!current) return null
 
@@ -42,7 +45,11 @@ export default function GlobalPlayer() {
                 sizes="48px"
                 className="object-cover"
               />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent pt-2">
+                <Visualizer variant="mini" />
+              </div>
             </div>
+
             <div className="flex-1 min-w-0">
               <div className="text-xs font-bold truncate">{current.title}</div>
               <div className="text-[10px] text-white/50 truncate mt-0.5">
