@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { SITE_CONFIG } from '@/lib/constants'
+import Navbar from '@/components/layout/Navbar'
 
 const inter = Inter({ subsets: ['latin'], display: 'swap' })
 
@@ -34,9 +35,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="id" suppressHydrationWarning>
       <body className={inter.className}>
-        {/* Navbar akan ditambahkan di Step berikutnya */}
-        <main className="min-h-screen pb-32">{children}</main>
-        {/* Player global akan ditambahkan di Step berikutnya */}
+        <Navbar />
+        <main className="min-h-screen pt-20 pb-32">{children}</main>
       </body>
     </html>
   )
