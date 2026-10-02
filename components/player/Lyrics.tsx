@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
 import { generateFallbackLyrics } from '@/lib/lyrics'
 import { clsx } from 'clsx'
@@ -8,14 +8,17 @@ import { clsx } from 'clsx'
 export default function Lyrics() {
   const current = usePlayerStore((s) => s.current)
   const currentTime = usePlayerStore((s) => s.currentTime)
+  const duration = usePlayerStore((s) => s.duration)
   const lyrics = usePlayerStore((s) => s.lyrics)
+  const lyricsDuration = usePlayerStore((s) => s.lyricsDuration)
   const setLyrics = usePlayerStore((s) => s.setLyrics)
+  const setLyricsDuration = usePlayerStore((s) => s.setLyricsDuration)
   const [loading, setLoading] = useState(false)
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const lineRefs = useRef<(HTMLDivElement | null)[]>([])
 
-  // Fetch lyrics saat lagu berubah
+  // === FETCH LYRICS ===
   useEffect(() => {
     if (!current) return
     let cancelled = false
@@ -32,20 +35,28 @@ export default function Lyrics() {
         const json = await res.json()
         if (cancelled) return
 
-        let lines = json?.data?.lyrics
+        const lines = json?.data?.lyrics
+        const ld = Number(json?.data?.lyricsDuration || 0)
+
         if (!Array.isArray(lines) || lines.length === 0) {
-          lines = generateFallbackLyrics(
-            current.title,
-            current.artist,
-            current.durationSec || 0
+          setLyrics(
+            generateFallbackLyrics(
+              current.title,
+              current.artist,
+              current.durationSec || 0
+            )
           )
+          setLyricsDuration(0)
+        } else {
+          setLyrics(lines)
+          setLyricsDuration(ld)
         }
-        setLyrics(lines)
       } catch (e) {
         if (cancelled) return
         setLyrics(
           generateFallbackLyrics(current.title, current.artist, current.durationSec || 0)
         )
+        setLyricsDuration(0)
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -55,17 +66,35 @@ export default function Lyrics() {
     return () => {
       cancelled = true
     }
-  }, [current, setLyrics])
+  }, [current, setLyrics, setLyricsDuration])
 
-  // Binary search index lirik aktif
-  const activeIdx = (() => {
+  // === SCALE FACTOR ===
+  // Kalau durasi lrclib beda jauh dengan durasi audio asli, kita scale
+  // Contoh: lrclib 180s, audio 218s → scale = 218/180 = 1.21
+  // Artinya setiap timestamp lirik dikali 1.21 biar match
+  const scaleFactor = useMemo(() => {
+    if (!duration || duration <= 0) return 1
+    if (!lyricsDuration || lyricsDuration <= 0) return 1
+    const diff = Math.abs(lyricsDuration - duration)
+    // Kalau beda < 3 detik, gak perlu scale
+    if (diff < 3) return 1
+    // Kalau beda > 60 detik, kemungkinan lagu beda versi → tetap scale biar proporsional
+    return duration / lyricsDuration
+  }, [duration, lyricsDuration])
+
+  // === ADJUSTED TIME ===
+  // currentTime * scaleFactor = waktu di timeline lirik asli
+  const adjustedTime = currentTime * scaleFactor
+
+  // === ACTIVE INDEX ===
+  const activeIdx = useMemo(() => {
     if (!lyrics.length) return -1
     let lo = 0
     let hi = lyrics.length - 1
     let res = -1
     while (lo <= hi) {
       const mid = (lo + hi) >> 1
-      if (lyrics[mid].time <= currentTime) {
+      if (lyrics[mid].time <= adjustedTime) {
         res = mid
         lo = mid + 1
       } else {
@@ -73,9 +102,9 @@ export default function Lyrics() {
       }
     }
     return res
-  })()
+  }, [lyrics, adjustedTime])
 
-  // Auto-scroll ke baris aktif
+  // === AUTO SCROLL ===
   useEffect(() => {
     if (activeIdx < 0) return
     const el = lineRefs.current[activeIdx]
