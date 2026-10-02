@@ -18,12 +18,39 @@ function loadYouTubeApi(): Promise<any> {
   if (ytApiPromise) return ytApiPromise
 
   ytApiPromise = new Promise((resolve, reject) => {
+    // Kalau script sudah ada (load kedua kali), pakai existing
+    const existing = document.querySelector('script[src*="youtube.com/iframe_api"]')
+    if (existing) {
+      // Polling sampai window.YT.Player tersedia
+      const check = setInterval(() => {
+        if (window.YT && window.YT.Player) {
+          clearInterval(check)
+          resolve(window.YT)
+        }
+      }, 100)
+      setTimeout(() => {
+        clearInterval(check)
+        if (!window.YT) reject(new Error('YouTube API timeout (polling)'))
+      }, 15000)
+      return
+    }
+
     const tag = document.createElement('script')
     tag.src = 'https://www.youtube.com/iframe_api'
-    tag.onerror = () => reject(new Error('Gagal memuat YouTube API'))
+    tag.async = true
+    tag.onerror = () => reject(new Error('Gagal memuat YouTube API script'))
     document.head.appendChild(tag)
-    window.onYouTubeIframeAPIReady = () => resolve(window.YT)
-    setTimeout(() => reject(new Error('YouTube API timeout')), 15000)
+
+    const prevHandler = window.onYouTubeIframeAPIReady
+    window.onYouTubeIframeAPIReady = () => {
+      if (prevHandler) try { prevHandler() } catch {}
+      resolve(window.YT)
+    }
+
+    setTimeout(() => {
+      if (window.YT && window.YT.Player) resolve(window.YT)
+      else reject(new Error('YouTube API timeout'))
+    }, 15000)
   })
   return ytApiPromise
 }
@@ -31,7 +58,8 @@ function loadYouTubeApi(): Promise<any> {
 export function useAudio() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const playerRef = useRef<any>(null)
-  const initializedRef = useRef(false)
+  const readyRef = useRef(false)
+  const pendingVideoRef = useRef<string | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
@@ -42,25 +70,30 @@ export function useAudio() {
   const loop = usePlayerStore((s) => s.loop)
   const setCurrentTime = usePlayerStore((s) => s.setCurrentTime)
   const setDuration = usePlayerStore((s) => s.setDuration)
-  const pause = usePlayerStore((s) => s.pause)
 
   // Init YT Player once
   useEffect(() => {
-    if (initializedRef.current) return
     let mounted = true
 
     const init = async () => {
       try {
         const YT = await loadYouTubeApi()
-        if (!mounted || !containerRef.current) return
+        if (!mounted || !containerRef.current) {
+          console.warn('[YT] Container not ready or unmounted')
+          return
+        }
 
-        const innerDiv = document.createElement('div')
+        // Buat div target di dalam container
+        const target = document.createElement('div')
+        target.id = 'yt-player-target-' + Date.now()
         containerRef.current.innerHTML = ''
-        containerRef.current.appendChild(innerDiv)
+        containerRef.current.appendChild(target)
 
-        const player = new YT.Player(innerDiv, {
-          height: '200',
+        console.log('[YT] Initializing player...')
+
+        const player = new YT.Player(target, {
           width: '200',
+          height: '200',
           playerVars: {
             autoplay: 0,
             controls: 0,
@@ -73,33 +106,55 @@ export function useAudio() {
           },
           events: {
             onReady: () => {
+              console.log('[YT] ✅ Player ready')
+              readyRef.current = true
               setStatus('ready')
+
+              // Load video yang pending (kalau ada)
+              if (pendingVideoRef.current) {
+                const vid = pendingVideoRef.current
+                pendingVideoRef.current = null
+                const state = usePlayerStore.getState()
+                if (state.isPlaying) {
+                  player.loadVideoById(vid)
+                } else {
+                  player.cueVideoById(vid)
+                }
+              }
             },
             onStateChange: (e: any) => {
-              // -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 cued
+              console.log('[YT] State:', e.data)
               if (e.data === 1) setStatus('ready')
               else if (e.data === 3) setStatus('loading')
               else if (e.data === 0) {
                 const state = usePlayerStore.getState()
-                if (state.loop && playerRef.current) {
-                  playerRef.current.seekTo(0)
-                  playerRef.current.playVideo()
+                if (state.loop) {
+                  player.seekTo(0)
+                  player.playVideo()
                 } else {
                   state.pause()
                 }
               }
             },
             onError: (e: any) => {
+              console.error('[YT] ❌ Error code:', e.data)
+              const codes: Record<number, string> = {
+                2: 'Video ID tidak valid',
+                5: 'Video tidak bisa diputar di HTML5',
+                100: 'Video tidak ditemukan / private',
+                101: 'Embed video ini dinonaktifkan',
+                150: 'Embed video ini dinonaktifkan',
+              }
               setStatus('error')
-              setErrorMsg(`YouTube error code: ${e.data}`)
+              setErrorMsg(codes[e.data] || `YouTube error: ${e.data}`)
             },
           },
         })
 
         playerRef.current = player
-        initializedRef.current = true
       } catch (e: any) {
         if (!mounted) return
+        console.error('[YT] Init error:', e)
         setStatus('error')
         setErrorMsg(e.message || 'Gagal load YouTube')
       }
@@ -114,31 +169,41 @@ export function useAudio() {
 
   // Load video saat current berubah
   useEffect(() => {
-    if (!playerRef.current || !current) return
-    const player = playerRef.current
-    if (!player.loadVideoById) return
+    if (!current) return
 
     setStatus('loading')
     setErrorMsg(null)
 
-    try {
-      if (isPlaying) {
-        player.loadVideoById(current.id)
-      } else {
-        player.cueVideoById(current.id)
+    const load = () => {
+      const player = playerRef.current
+      if (!player || !readyRef.current) {
+        // Belum siap, simpan pending
+        pendingVideoRef.current = current.id
+        return
       }
-    } catch (e: any) {
-      setStatus('error')
-      setErrorMsg(e.message)
+      try {
+        console.log(`[YT] Loading video: ${current.id}`)
+        if (isPlaying) {
+          player.loadVideoById(current.id)
+        } else {
+          player.cueVideoById(current.id)
+        }
+      } catch (e: any) {
+        console.error('[YT] Load error:', e)
+        setStatus('error')
+        setErrorMsg(e.message)
+      }
     }
+
+    load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current])
 
   // Sync play/pause
   useEffect(() => {
-    if (!playerRef.current || !current) return
+    if (!current) return
     const player = playerRef.current
-    if (!player.playVideo) return
+    if (!player || !readyRef.current || typeof player.playVideo !== 'function') return
 
     try {
       if (isPlaying) {
@@ -151,11 +216,12 @@ export function useAudio() {
 
   // Volume
   useEffect(() => {
-    if (!playerRef.current || !playerRef.current.setVolume) return
+    const player = playerRef.current
+    if (!player || typeof player.setVolume !== 'function') return
     try {
-      playerRef.current.setVolume(Math.round((muted ? 0 : volume) * 100))
-      if (muted) playerRef.current.mute?.()
-      else playerRef.current.unMute?.()
+      player.setVolume(Math.round((muted ? 0 : volume) * 100))
+      if (muted) player.mute?.()
+      else player.unMute?.()
     } catch {}
   }, [volume, muted])
 
