@@ -4,6 +4,38 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
 
 const PRIMARY_API = 'https://api.ikyyxd.my.id/search/ytplayv2'
+const CORS_PROXY = 'https://api.allorigins.win/raw?url='
+
+async function fetchFromIkyyxd(query: string): Promise<any> {
+  const apiUrl = `${PRIMARY_API}?q=${encodeURIComponent(query)}`
+
+  // Coba direct dulu
+  try {
+    console.log(`[Audio] Direct: ${apiUrl}`)
+    const res = await fetch(apiUrl, { headers: { Accept: 'application/json' } })
+    if (res.ok) {
+      const json = await res.json()
+      if (json.status && json.result?.audio?.url) {
+        console.log('[Audio] ✅ Direct success')
+        return json
+      }
+    }
+  } catch (e: any) {
+    console.warn('[Audio] Direct blocked:', e.message)
+  }
+
+  // Fallback CORS proxy — sama seperti OAA
+  console.log('[Audio] 🔄 CORS proxy...')
+  const proxyUrl = `${CORS_PROXY}${encodeURIComponent(apiUrl)}`
+  const res2 = await fetch(proxyUrl)
+  if (!res2.ok) throw new Error(`Proxy error ${res2.status}`)
+  const json2 = await res2.json()
+  if (!json2.status || !json2.result?.audio?.url) {
+    throw new Error('Lagu tidak ditemukan')
+  }
+  console.log('[Audio] ✅ Proxy success')
+  return json2
+}
 
 export function useAudio() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -18,12 +50,12 @@ export function useAudio() {
   const setCurrentTime = usePlayerStore((s) => s.setCurrentTime)
   const setDuration = usePlayerStore((s) => s.setDuration)
 
-  // Init HTML5 Audio element sekali
   useEffect(() => {
     if (typeof window === 'undefined') return
     const audio = new Audio()
     audio.preload = 'auto'
-    audio.crossOrigin = 'anonymous'
+    // ❌ JANGAN SET crossOrigin!
+    // audio.crossOrigin = 'anonymous'  ← sebelumnya ini, hapus!
     audioRef.current = audio
 
     const onTime = () => setCurrentTime(audio.currentTime)
@@ -42,8 +74,9 @@ export function useAudio() {
       }
     }
     const onError = () => {
+      console.error('[Audio] Error:', audio.error)
       setStatus('error')
-      setErrorMsg('Gagal memuat audio. Coba lagu lain.')
+      setErrorMsg('Audio gagal dimuat')
     }
 
     audio.addEventListener('timeupdate', onTime)
@@ -64,13 +97,12 @@ export function useAudio() {
     }
   }, [setCurrentTime, setDuration])
 
-  // Load audio ketika lagu berubah — fetch langsung dari browser ke iKyyXD
   useEffect(() => {
     const audio = audioRef.current
     if (!audio || !current) return
 
     let cancelled = false
-    const query = current.title + (current.artist ? ' ' + current.artist : '')
+    const query = current.title.slice(0, 80) // query simple, kayak OAA
 
     const loadAudio = async () => {
       setStatus('loading')
@@ -78,37 +110,20 @@ export function useAudio() {
       audio.pause()
       audio.removeAttribute('src')
 
-      const t0 = Date.now()
-      const apiUrl = `${PRIMARY_API}?q=${encodeURIComponent(query)}`
-
-      console.log(`[Audio] Fetching: ${query}`)
+      console.log(`[Audio] Loading: "${query}"`)
 
       try {
-        // Fetch langsung dari browser ke API iKyyXD (bypass Vercel timeout)
-        const res = await fetch(apiUrl, {
-          headers: { Accept: 'application/json' },
-        })
-
+        const json = await fetchFromIkyyxd(query)
         if (cancelled) return
-
-        if (!res.ok) throw new Error(`API error ${res.status}`)
-        const json = await res.json()
-
-        if (cancelled) return
-
-        if (!json.status || !json.result?.audio?.url) {
-          throw new Error('Lagu tidak ditemukan di API')
-        }
 
         const audioUrl: string = json.result.audio.url
-        const ms = Date.now() - t0
-        console.log(`[Audio] ✅ Got audio in ${ms}ms: ${json.result.title}`)
+        console.log(`[Audio] ✅ URL: ${audioUrl.slice(0, 60)}...`)
 
         audio.src = audioUrl
         audio.load()
       } catch (e: any) {
         if (cancelled) return
-        console.error('[Audio] Load error:', e.message)
+        console.error('[Audio] ❌ Failed:', e.message)
         setStatus('error')
         setErrorMsg(e.message || 'Gagal memuat audio')
       }
@@ -121,7 +136,6 @@ export function useAudio() {
     }
   }, [current])
 
-  // Sync play/pause
   useEffect(() => {
     const audio = audioRef.current
     if (!audio || !current) return
@@ -129,14 +143,13 @@ export function useAudio() {
     if (isPlaying) {
       audio.play().catch((e) => {
         console.warn('[Audio] Play blocked:', e.message)
-        setErrorMsg('Tap layar dulu, lalu klik play lagi')
+        setErrorMsg('Tap layar dulu, lalu play lagi')
       })
     } else {
       audio.pause()
     }
   }, [isPlaying, current])
 
-  // Volume
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
@@ -144,7 +157,6 @@ export function useAudio() {
     audio.muted = muted
   }, [volume, muted])
 
-  // Loop
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
