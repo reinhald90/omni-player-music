@@ -1,7 +1,7 @@
 export const SITE_CONFIG = {
   name: 'Omni Player Music',
   shortName: 'Omni Player',
-  url: 'https://omniplayermusic.vercel.app',
+  url: 'https://omniplayermusic.web.id',
   description: 'Premium Music Player — Streaming, Lirik, & History langsung di browser.',
   author: 'Ashiro',
   channel: {
@@ -11,9 +11,9 @@ export const SITE_CONFIG = {
   },
   nav: [
     { label: 'Home', href: '/' },
+    { label: 'Favorit', href: '/favorites' },
     { label: 'History', href: '/history' },
     { label: 'About', href: '/about' },
-    { label: 'Channel', href: '/channel' },
   ],
 }
 
