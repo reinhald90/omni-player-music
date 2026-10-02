@@ -10,7 +10,8 @@ interface PlayerState {
   currentTime: number
   duration: number
   lyrics: LyricLine[]
-  lyricsDuration: number   // Baru di tambah kan Guys
+  lyricsDuration: number
+  lyricsOffset: number   // ← TAMBAH INI (detik, bisa negatif)
   loop: boolean
   fullMode: boolean
   sleepEnd: number | null
@@ -32,7 +33,8 @@ interface PlayerState {
   setCurrentTime: (t: number) => void
   setDuration: (d: number) => void
   setLyrics: (l: LyricLine[]) => void
-  setLyricsDuration: (d: number) => void   // ← TAMBAH INI
+  setLyricsDuration: (d: number) => void
+  setLyricsOffset: (o: number) => void   // ← TAMBAH INI
   toggleLoop: () => void
   openFull: () => void
   closeFull: () => void
@@ -49,7 +51,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentTime: 0,
   duration: 0,
   lyrics: [],
-  lyricsDuration: 0,   // ← TAMBAH INI
+  lyricsDuration: 0,
+  lyricsOffset: 0,   // ← TAMBAH INI
   loop: false,
   fullMode: false,
   sleepEnd: null,
@@ -61,7 +64,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentTime: 0,
       duration: 0,
       lyrics: [],
-      lyricsDuration: 0,   // reset
+      lyricsDuration: 0,
+      // Jangan reset lyricsOffset biar user gak perlu atur ulang tiap lagu
       isPlaying: true,
     }),
   setQueue: (songs) => set({ queue: songs }),
@@ -98,7 +102,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setCurrentTime: (t) => set({ currentTime: t }),
   setDuration: (d) => set({ duration: d }),
   setLyrics: (l) => set({ lyrics: l }),
-  setLyricsDuration: (d) => set({ lyricsDuration: d }),   // ← TAMBAH INI
+  setLyricsDuration: (d) => set({ lyricsDuration: d }),
+  setLyricsOffset: (o) => set({ lyricsOffset: o }),   // ← TAMBAH INI
   toggleLoop: () => set((s) => ({ loop: !s.loop })),
   openFull: () => set({ fullMode: true }),
   closeFull: () => set({ fullMode: false }),
