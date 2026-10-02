@@ -1,25 +1,17 @@
 'use client'
 
 import Image from 'next/image'
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
 import { formatTime } from '@/lib/formatter'
 import Visualizer from './Visualizer'
 import Lyrics from './Lyrics'
+import QueuePanel from './QueuePanel'
+import SleepTimerPanel from './SleepTimerPanel'
 import {
-  ChevronDown,
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
-  Repeat,
-  Shuffle,
-  Heart,
-  Volume2,
-  VolumeX,
-  Volume1,
-  Mic2,
-  Disc3,
+  ChevronDown, Play, Pause, SkipBack, SkipForward, Repeat, Shuffle,
+  Heart, Volume2, VolumeX, Volume1, Mic2, Disc3,
+  ListMusic, Moon, Download, Share2,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -38,26 +30,56 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
   const volume = usePlayerStore((s) => s.volume)
   const muted = usePlayerStore((s) => s.muted)
   const loop = usePlayerStore((s) => s.loop)
+  const queue = usePlayerStore((s) => s.queue)
+  const sleepEnd = usePlayerStore((s) => s.sleepEnd)
   const toggle = usePlayerStore((s) => s.toggle)
   const closeFull = usePlayerStore((s) => s.closeFull)
   const setVolume = usePlayerStore((s) => s.setVolume)
   const toggleLoop = usePlayerStore((s) => s.toggleLoop)
   const toggleMute = usePlayerStore((s) => s.toggleMute)
+  const next = usePlayerStore((s) => s.next)
+  const prev = usePlayerStore((s) => s.prev)
 
   const barRef = useRef<HTMLDivElement | null>(null)
   const [dragging, setDragging] = useState(false)
   const [dragTime, setDragTime] = useState(0)
   const [liked, setLiked] = useState(false)
   const [showLyrics, setShowLyrics] = useState(false)
+  const [queueOpen, setQueueOpen] = useState(false)
+  const [timerOpen, setTimerOpen] = useState(false)
+  const [swipeY, setSwipeY] = useState(0)
+  const swipeStart = useRef<number | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+
+  // Listen ke event seek dari keyboard shortcut
+  useEffect(() => {
+    const handler = (e: any) => onSeekRelative(e.detail || 0)
+    document.addEventListener('omni:seek', handler as EventListener)
+    return () => document.removeEventListener('omni:seek', handler as EventListener)
+  }, [onSeekRelative])
+
+  // Sleep timer display
+  const [sleepRemaining, setSleepRemaining] = useState(0)
+  useEffect(() => {
+    if (!sleepEnd) return setSleepRemaining(0)
+    const tick = () =>
+      setSleepRemaining(Math.max(0, Math.floor((sleepEnd - Date.now()) / 1000)))
+    tick()
+    const int = setInterval(tick, 1000)
+    return () => clearInterval(int)
+  }, [sleepEnd])
+
+  const showToast = (msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(null), 1800)
+  }
 
   if (!current) return null
 
   const displayTime = dragging ? dragTime : currentTime
   const progress = duration > 0 ? (displayTime / duration) * 100 : 0
   const remaining = Math.max(0, duration - displayTime)
-
-  const VolumeIcon =
-    muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2
+  const VolumeIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2
 
   const getTimeFromEvent = (clientX: number) => {
     if (!barRef.current || !duration) return 0
@@ -65,7 +87,6 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
     const px = Math.max(0, Math.min(clientX - rect.left, rect.width))
     return (px / rect.width) * duration
   }
-
   const onPointerDown = (e: React.PointerEvent) => {
     setDragging(true)
     setDragTime(getTimeFromEvent(e.clientX))
@@ -77,15 +98,65 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
   }
   const onPointerUp = (e: React.PointerEvent) => {
     if (!dragging) return
-    const t = getTimeFromEvent(e.clientX)
-    onSeek(t)
+    onSeek(getTimeFromEvent(e.clientX))
     setDragging(false)
     ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
   }
 
+  // === SWIPE DOWN HANDLERS ===
+  const onSwipeStart = (clientY: number) => {
+    swipeStart.current = clientY
+  }
+  const onSwipeMove = (clientY: number) => {
+    if (swipeStart.current == null) return
+    const dy = clientY - swipeStart.current
+    if (dy > 0) setSwipeY(dy)
+  }
+  const onSwipeEnd = () => {
+    if (swipeY > 100) closeFull()
+    setSwipeY(0)
+    swipeStart.current = null
+  }
+
+  // === ACTIONS ===
+  const handleDownload = async () => {
+    try {
+      showToast('Menyiapkan download…')
+      // Ambil audio URL dari proxy (buka di tab baru → browser akan download)
+      const res = await fetch(`/api/stream?q=${encodeURIComponent(current.url || current.title)}`)
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error)
+      const a = document.createElement('a')
+      a.href = `/api/audio?url=${encodeURIComponent(json.data.audioUrl)}`
+      a.download = `${current.title.replace(/[^\w\s]/g, '')}.mp3`
+      a.click()
+      showToast('Download dimulai!')
+    } catch (e: any) {
+      showToast('Gagal download')
+    }
+  }
+
+  const handleShare = async () => {
+    const text = `🎵 ${current.title}\n👤 ${current.artist}\n\nDengerin di Omni Player Music 🎧`
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: current.title, text, url: current.url })
+      } else {
+        await navigator.clipboard.writeText(`${text}\n${current.url}`)
+        showToast('Link disalin!')
+      }
+    } catch {}
+  }
+
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col overflow-hidden">
-      {/* Ambient Blur Background */}
+    <div
+      className="fixed inset-0 z-[60] flex flex-col overflow-hidden transition-transform"
+      style={{ transform: `translateY(${swipeY}px)` }}
+      onTouchStart={(e) => onSwipeStart(e.touches[0].clientY)}
+      onTouchMove={(e) => onSwipeMove(e.touches[0].clientY)}
+      onTouchEnd={onSwipeEnd}
+    >
+      {/* Ambient */}
       <div className="absolute inset-0 -z-10">
         <Image
           src={current.thumbnail}
@@ -97,19 +168,29 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/70 to-black/95" />
       </div>
 
+      {/* Toast */}
+      {toast && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-black/80 backdrop-blur-xl border border-white/10 text-xs font-bold animate-[fadeIn_0.2s]">
+          {toast}
+        </div>
+      )}
+
       {/* Header */}
       <header className="flex items-center justify-between px-5 pt-5 pb-3 flex-none">
         <button
           onClick={closeFull}
           className="w-10 h-10 rounded-full flex items-center justify-center bg-white/[0.07] backdrop-blur-xl border border-white/10 text-white/90 hover:bg-white/15 transition-all active:scale-90"
-          aria-label="Tutup"
         >
           <ChevronDown size={20} />
         </button>
 
         <div className="text-center flex-1 min-w-0 px-3">
           <div className="text-[10px] font-semibold tracking-[0.25em] uppercase text-white/40">
-            {showLyrics ? 'Lirik' : 'Sedang Diputar'}
+            {sleepEnd
+              ? `⏱️ ${Math.floor(sleepRemaining / 60)}:${String(sleepRemaining % 60).padStart(2, '0')}`
+              : showLyrics
+                ? 'Lirik'
+                : 'Sedang Diputar'}
           </div>
           <div className="text-[11px] text-white/60 mt-0.5 truncate font-medium">
             {current.artist}
@@ -124,18 +205,16 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
               ? 'bg-white/[0.07] backdrop-blur-xl border border-white/10 text-brand'
               : 'bg-white/[0.07] backdrop-blur-xl border border-white/10 text-white/90 hover:bg-white/15'
           )}
-          aria-label="Suka"
         >
           <Heart size={18} fill={liked ? 'currentColor' : 'none'} />
         </button>
       </header>
 
-      {/* Main area — tap to switch cover ↔ lyrics */}
+      {/* Main area */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-2 min-h-0 gap-4">
         <button
           onClick={() => setShowLyrics((v) => !v)}
           className="relative w-full max-w-[320px] aspect-square rounded-[28px] overflow-hidden shadow-[0_40px_100px_-20px_rgba(0,0,0,0.95),0_20px_40px_-15px_rgba(255,45,85,0.15)] ring-1 ring-white/5 active:scale-[0.98] transition-transform"
-          aria-label={showLyrics ? 'Lihat cover' : 'Lihat lirik'}
         >
           {showLyrics ? (
             <div className="w-full h-full bg-gradient-to-b from-black/40 to-black/60 backdrop-blur-xl">
@@ -160,28 +239,22 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           )}
         </button>
 
-        {/* Toggle chip + Visualizer */}
         <div className="flex items-center justify-between w-full max-w-[320px] px-1">
           <button
             onClick={() => setShowLyrics(false)}
             className={clsx(
               'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all',
-              !showLyrics
-                ? 'bg-white/15 text-white'
-                : 'bg-white/5 text-white/40 hover:text-white/70'
+              !showLyrics ? 'bg-white/15 text-white' : 'bg-white/5 text-white/40 hover:text-white/70'
             )}
           >
             <Disc3 size={11} />
             Cover
           </button>
-
           <button
             onClick={() => setShowLyrics(true)}
             className={clsx(
               'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all',
-              showLyrics
-                ? 'bg-white/15 text-white'
-                : 'bg-white/5 text-white/40 hover:text-white/70'
+              showLyrics ? 'bg-white/15 text-white' : 'bg-white/5 text-white/40 hover:text-white/70'
             )}
           >
             <Mic2 size={11} />
@@ -189,7 +262,6 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           </button>
         </div>
 
-        {/* Visualizer */}
         {!showLyrics && (
           <div className="w-full max-w-[320px]">
             <Visualizer variant="full" />
@@ -197,7 +269,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
         )}
       </div>
 
-      {/* Info + Kontrol */}
+      {/* Info + Controls */}
       <div className="flex-none px-6 pb-8 space-y-5">
         <div className="text-center px-2">
           <h2 className="text-[20px] leading-tight font-bold text-white truncate">
@@ -211,7 +283,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           )}
         </div>
 
-        {/* Progress Bar */}
+        {/* Progress */}
         <div className="px-1">
           <div
             ref={barRef}
@@ -243,25 +315,29 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
         {/* Controls */}
         <div className="flex items-center justify-center gap-6 sm:gap-8">
           <button
-            className="text-white/40 hover:text-white/70 transition-colors p-1"
-            aria-label="Acak"
+            onClick={() => setQueueOpen(true)}
+            className="relative text-white/40 hover:text-white/70 transition-colors p-1"
+            aria-label="Antrian"
           >
-            <Shuffle size={18} />
+            <ListMusic size={18} />
+            {queue.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-brand text-[9px] font-black flex items-center justify-center">
+                {queue.length > 9 ? '9+' : queue.length}
+              </span>
+            )}
           </button>
 
           <button
-            onClick={() => onSeekRelative(-10)}
+            onClick={prev}
             className="text-white/90 hover:text-white transition-colors p-1 active:scale-90"
-            aria-label="Mundur 10 detik"
           >
-            <SkipBack size={28} fill="currentColor" />
+            <SkipBack size={26} fill="currentColor" />
           </button>
 
           <button
             onClick={toggle}
             disabled={status === 'loading'}
             className="w-[68px] h-[68px] rounded-full bg-white text-black flex items-center justify-center shadow-[0_16px_40px_-8px_rgba(255,255,255,0.35),0_8px_20px_-6px_rgba(0,0,0,0.5)] hover:scale-[1.04] active:scale-95 transition-transform disabled:opacity-60"
-            aria-label={isPlaying ? 'Jeda' : 'Putar'}
           >
             {status === 'loading' ? (
               <div className="w-6 h-6 border-[3px] border-black/20 border-t-black rounded-full animate-spin" />
@@ -273,11 +349,10 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           </button>
 
           <button
-            onClick={() => onSeekRelative(10)}
+            onClick={next}
             className="text-white/90 hover:text-white transition-colors p-1 active:scale-90"
-            aria-label="Maju 10 detik"
           >
-            <SkipForward size={28} fill="currentColor" />
+            <SkipForward size={26} fill="currentColor" />
           </button>
 
           <button
@@ -286,9 +361,38 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
               'transition-colors p-1',
               loop ? 'text-brand' : 'text-white/40 hover:text-white/70'
             )}
-            aria-label="Ulangi"
           >
             <Repeat size={18} />
+          </button>
+        </div>
+
+        {/* Extra actions */}
+        <div className="flex items-center justify-center gap-2 pt-1">
+          <button
+            onClick={() => setTimerOpen(true)}
+            className={clsx(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all active:scale-95',
+              sleepEnd
+                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                : 'bg-white/5 text-white/50 hover:text-white/80 hover:bg-white/10'
+            )}
+          >
+            <Moon size={11} />
+            Timer
+          </button>
+          <button
+            onClick={handleDownload}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 text-white/50 hover:text-white/80 hover:bg-white/10 text-[10px] font-bold uppercase tracking-wider transition-all active:scale-95"
+          >
+            <Download size={11} />
+            Simpan
+          </button>
+          <button
+            onClick={handleShare}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 text-white/50 hover:text-white/80 hover:bg-white/10 text-[10px] font-bold uppercase tracking-wider transition-all active:scale-95"
+          >
+            <Share2 size={11} />
+            Bagikan
           </button>
         </div>
 
@@ -297,7 +401,6 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           <button
             onClick={toggleMute}
             className="text-white/35 hover:text-white/70 transition-colors flex-none"
-            aria-label="Bisukan"
           >
             <VolumeIcon size={16} />
           </button>
@@ -319,6 +422,10 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           <Volume2 size={16} className="text-white/35 flex-none" />
         </div>
       </div>
+
+      {/* Panels */}
+      <QueuePanel open={queueOpen} onClose={() => setQueueOpen(false)} />
+      <SleepTimerPanel open={timerOpen} onClose={() => setTimerOpen(false)} />
     </div>
   )
 }
