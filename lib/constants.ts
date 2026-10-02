@@ -12,6 +12,7 @@ export const SITE_CONFIG = {
   nav: [
     { label: 'Home', href: '/' },
     { label: 'Favorit', href: '/favorites' },
+    { label: 'Playlist', href: '/playlists' },
     { label: 'History', href: '/history' },
     { label: 'About', href: '/about' },
     { label: 'Channel', href: '/channel' },
