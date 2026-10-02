@@ -36,7 +36,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   lyrics: [],
   loop: false,
 
-  setCurrent: (song) => set({ current: song, currentTime: 0, duration: 0, lyrics: [] }),
+  setCurrent: (song) =>
+    set({
+      current: song,
+      currentTime: 0,
+      duration: 0,
+      lyrics: [],
+      isPlaying: true,
+    }),
   setQueue: (songs) => set({ queue: songs }),
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
