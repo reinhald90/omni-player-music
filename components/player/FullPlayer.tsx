@@ -9,11 +9,27 @@ import Visualizer from './Visualizer'
 import Lyrics from './Lyrics'
 import QueuePanel from './QueuePanel'
 import SleepTimerPanel from './SleepTimerPanel'
+import KaraokeMode from './KaraokeMode'
 import ShareCardModal from '@/components/share/ShareCardModal'
 import {
-  ChevronDown, Play, Pause, SkipBack, SkipForward, Repeat, Shuffle,
-  Heart, Volume2, VolumeX, Volume1, Mic2, Disc3,
-  ListMusic, Moon, Download, Share2,
+  ChevronDown,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Repeat,
+  Shuffle,
+  Heart,
+  Volume2,
+  VolumeX,
+  Volume1,
+  Mic2,
+  Disc3,
+  ListMusic,
+  Moon,
+  Download,
+  Share2,
+  Mic,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -52,6 +68,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
   const [queueOpen, setQueueOpen] = useState(false)
   const [timerOpen, setTimerOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const [karaokeOpen, setKaraokeOpen] = useState(false)
   const [swipeY, setSwipeY] = useState(0)
   const swipeStart = useRef<number | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -162,6 +179,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
       onTouchMove={(e) => onSwipeMove(e.touches[0].clientY)}
       onTouchEnd={onSwipeEnd}
     >
+      {/* Background ambient */}
       <div className="absolute inset-0 -z-10">
         <Image
           src={current.thumbnail}
@@ -179,10 +197,12 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
         </div>
       )}
 
+      {/* Header */}
       <header className="flex items-center justify-between px-5 pt-5 pb-3 flex-none">
         <button
           onClick={closeFull}
           className="w-10 h-10 rounded-full flex items-center justify-center bg-white/[0.07] backdrop-blur-xl border border-white/10 text-white/90 hover:bg-white/15 transition-all active:scale-90"
+          aria-label="Tutup"
         >
           <ChevronDown size={20} />
         </button>
@@ -214,6 +234,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
         </button>
       </header>
 
+      {/* Main — Cover / Lyrics + Visualizer */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-2 min-h-0 gap-4">
         <button
           onClick={() => setShowLyrics((v) => !v)}
@@ -272,6 +293,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
         )}
       </div>
 
+      {/* Info + Controls */}
       <div className="flex-none px-6 pb-8 space-y-5">
         <div className="text-center px-2">
           <h2 className="text-[20px] leading-tight font-bold text-white truncate">
@@ -285,6 +307,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           )}
         </div>
 
+        {/* Progress */}
         <div className="px-1">
           <div
             ref={barRef}
@@ -313,10 +336,12 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           </div>
         </div>
 
+        {/* Controls */}
         <div className="flex items-center justify-center gap-6 sm:gap-8">
           <button
             onClick={() => setQueueOpen(true)}
             className="relative text-white/40 hover:text-white/70 transition-colors p-1"
+            aria-label="Antrian"
           >
             <ListMusic size={18} />
             {queue.length > 0 && (
@@ -329,6 +354,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           <button
             onClick={prev}
             className="text-white/90 hover:text-white transition-colors p-1 active:scale-90"
+            aria-label="Sebelumnya"
           >
             <SkipBack size={26} fill="currentColor" />
           </button>
@@ -337,6 +363,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
             onClick={toggle}
             disabled={status === 'loading'}
             className="w-[68px] h-[68px] rounded-full bg-white text-black flex items-center justify-center shadow-[0_16px_40px_-8px_rgba(255,255,255,0.35),0_8px_20px_-6px_rgba(0,0,0,0.5)] hover:scale-[1.04] active:scale-95 transition-transform disabled:opacity-60"
+            aria-label={isPlaying ? 'Jeda' : 'Putar'}
           >
             {status === 'loading' ? (
               <div className="w-6 h-6 border-[3px] border-black/20 border-t-black rounded-full animate-spin" />
@@ -350,6 +377,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           <button
             onClick={next}
             className="text-white/90 hover:text-white transition-colors p-1 active:scale-90"
+            aria-label="Berikutnya"
           >
             <SkipForward size={26} fill="currentColor" />
           </button>
@@ -360,12 +388,14 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
               'transition-colors p-1',
               loop ? 'text-brand' : 'text-white/40 hover:text-white/70'
             )}
+            aria-label="Ulangi"
           >
             <Repeat size={18} />
           </button>
         </div>
 
-        <div className="flex items-center justify-center gap-2 pt-1">
+        {/* Extra Actions */}
+        <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
           <button
             onClick={() => setTimerOpen(true)}
             className={clsx(
@@ -377,6 +407,13 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           >
             <Moon size={11} />
             Timer
+          </button>
+          <button
+            onClick={() => setKaraokeOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 text-white/50 hover:text-white/80 hover:bg-white/10 text-[10px] font-bold uppercase tracking-wider transition-all active:scale-95"
+          >
+            <Mic size={11} />
+            Karaoke
           </button>
           <button
             onClick={handleDownload}
@@ -394,10 +431,12 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           </button>
         </div>
 
+        {/* Volume */}
         <div className="flex items-center gap-3 pt-1 px-1">
           <button
             onClick={toggleMute}
             className="text-white/35 hover:text-white/70 transition-colors flex-none"
+            aria-label="Bisukan"
           >
             <VolumeIcon size={16} />
           </button>
@@ -420,9 +459,11 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
         </div>
       </div>
 
+      {/* Panels */}
       <QueuePanel open={queueOpen} onClose={() => setQueueOpen(false)} />
       <SleepTimerPanel open={timerOpen} onClose={() => setTimerOpen(false)} />
       <ShareCardModal open={shareOpen} onClose={() => setShareOpen(false)} />
+      {karaokeOpen && <KaraokeMode onClose={() => setKaraokeOpen(false)} />}
     </div>
   )
 }
