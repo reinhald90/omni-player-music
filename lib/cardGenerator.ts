@@ -2,8 +2,8 @@ import type { Song } from '@/types'
 
 const CARD_WIDTH = 1080
 const CARD_HEIGHT = 1920
+const LOGO_URL = '/icon.png'
 
-/** Load image dari URL jadi HTMLImageElement */
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -14,7 +14,6 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   })
 }
 
-/** Draw rounded rect di canvas */
 function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -36,7 +35,6 @@ function roundRect(
   ctx.closePath()
 }
 
-/** Wrap text jadi multi-line */
 function wrapText(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -60,10 +58,9 @@ function wrapText(
 }
 
 export interface ShareCardOptions {
-  size?: 'story' | 'post' // 1080x1920 atau 1080x1080
+  size?: 'story' | 'post'
 }
 
-/** Generate share card → return Blob PNG */
 export async function generateShareCard(
   song: Song,
   options: ShareCardOptions = {}
@@ -72,34 +69,32 @@ export async function generateShareCard(
   const W = CARD_WIDTH
   const H = size === 'story' ? CARD_HEIGHT : CARD_WIDTH
 
-  // === Setup canvas ===
   const canvas = document.createElement('canvas')
   canvas.width = W
   canvas.height = H
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Canvas tidak didukung browser')
 
-  // === Background: dark base ===
+  // === Background ===
   ctx.fillStyle = '#050505'
   ctx.fillRect(0, 0, W, H)
 
-  // === Background: blurred thumbnail ===
+  // === Blurred thumbnail background ===
   try {
     const thumb = await loadImage(song.thumbnail)
     ctx.save()
     ctx.filter = 'blur(120px) saturate(1.8) brightness(0.7)'
-    // Draw zoomed untuk blur effect
     const scale = 2.5
     ctx.drawImage(
       thumb,
-      -W * (scale - 1) / 2,
-      -H * (scale - 1) / 2,
+      (-W * (scale - 1)) / 2,
+      (-H * (scale - 1)) / 2,
       W * scale,
       H * scale
     )
     ctx.restore()
   } catch (e) {
-    console.warn('[Card] Thumbnail load failed, using solid bg')
+    console.warn('[Card] Thumbnail load failed')
   }
 
   // === Overlay gradient ===
@@ -110,7 +105,7 @@ export async function generateShareCard(
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, W, H)
 
-  // === PINK GLOW di background ===
+  // === Pink glow ===
   const glow = ctx.createRadialGradient(W / 2, H * 0.5, 100, W / 2, H * 0.5, W * 0.9)
   glow.addColorStop(0, 'rgba(255,45,85,0.15)')
   glow.addColorStop(0.6, 'rgba(192,132,252,0.06)')
@@ -118,7 +113,7 @@ export async function generateShareCard(
   ctx.fillStyle = glow
   ctx.fillRect(0, 0, W, H)
 
-  // === TOP: Label "NOW PLAYING" ===
+  // === TOP: NOW PLAYING ===
   ctx.save()
   ctx.font = 'bold 32px Inter, system-ui, sans-serif'
   ctx.fillStyle = '#ff2d55'
@@ -127,13 +122,12 @@ export async function generateShareCard(
   ctx.fillText('● NOW PLAYING', W / 2, 160)
   ctx.restore()
 
-  // === Album Art (kotak besar) ===
-  const artSize = W * 0.72 // 72% dari lebar
+  // === Album Art ===
+  const artSize = W * 0.72
   const artX = (W - artSize) / 2
   const artY = H * 0.22
   const artRadius = 60
 
-  // Shadow dulu
   ctx.save()
   ctx.shadowColor = 'rgba(255,45,85,0.4)'
   ctx.shadowBlur = 100
@@ -143,7 +137,6 @@ export async function generateShareCard(
   ctx.fill()
   ctx.restore()
 
-  // Gambar album art
   try {
     const thumb = await loadImage(song.thumbnail)
     ctx.save()
@@ -152,7 +145,6 @@ export async function generateShareCard(
     ctx.drawImage(thumb, artX, artY, artSize, artSize)
     ctx.restore()
   } catch (e) {
-    // Fallback: solid color
     ctx.save()
     ctx.fillStyle = '#ff2d55'
     roundRect(ctx, artX, artY, artSize, artSize, artRadius)
@@ -160,7 +152,7 @@ export async function generateShareCard(
     ctx.restore()
   }
 
-  // === Song Title (di bawah album) ===
+  // === Title ===
   const textAreaY = artY + artSize + 100
   const maxTextWidth = W * 0.85
 
@@ -199,39 +191,76 @@ export async function generateShareCard(
   roundRect(ctx, barX, barY, barWidth, 6, 3)
   ctx.fill()
 
-  // Pink fill sebagian
   ctx.fillStyle = '#ff2d55'
   roundRect(ctx, barX, barY, barWidth * 0.4, 6, 3)
   ctx.fill()
   ctx.restore()
 
-  // === Bottom: Logo & CTA ===
+  // === FOOTER: Logo + Text ===
   const bottomY = H - 200
-
-  // Logo circle (pakai thumbnail mini atau emoji fallback)
   const logoSize = 80
   const logoX = W / 2 - 260
   const logoY = bottomY
 
-  ctx.save()
-  // Gradient circle
-  const logoGrad = ctx.createLinearGradient(logoX, logoY, logoX + logoSize, logoY + logoSize)
-  logoGrad.addColorStop(0, '#ff2d55')
-  logoGrad.addColorStop(1, '#c084fc')
-  ctx.fillStyle = logoGrad
-  ctx.beginPath()
-  ctx.arc(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2, 0, Math.PI * 2)
-  ctx.fill()
+  // === LOAD ICON.PNG SEBAGAI LOGO ===
+  let logoLoaded = false
+  try {
+    const logoImg = await loadImage(LOGO_URL)
 
-  // Emoji headphone
-  ctx.font = '48px Inter, system-ui, sans-serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#fff'
-  ctx.fillText('🎧', logoX + logoSize / 2, logoY + logoSize / 2 + 4)
-  ctx.restore()
+    // Circle background pink-purple (jaga-jaga kalau icon transparan)
+    ctx.save()
+    const logoGrad = ctx.createLinearGradient(
+      logoX,
+      logoY,
+      logoX + logoSize,
+      logoY + logoSize
+    )
+    logoGrad.addColorStop(0, '#ff2d55')
+    logoGrad.addColorStop(1, '#c084fc')
+    ctx.fillStyle = logoGrad
+    ctx.beginPath()
+    ctx.arc(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
 
-  // Text "Omni Player Music"
+    // Gambar icon.png di dalam lingkaran (clipped)
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2, 0, Math.PI * 2)
+    ctx.clip()
+    ctx.drawImage(logoImg, logoX, logoY, logoSize, logoSize)
+    ctx.restore()
+
+    logoLoaded = true
+  } catch (e) {
+    console.warn('[Card] icon.png load failed, fallback to emoji')
+  }
+
+  // Fallback kalau icon.png gagal load → pakai emoji
+  if (!logoLoaded) {
+    ctx.save()
+    const logoGrad = ctx.createLinearGradient(
+      logoX,
+      logoY,
+      logoX + logoSize,
+      logoY + logoSize
+    )
+    logoGrad.addColorStop(0, '#ff2d55')
+    logoGrad.addColorStop(1, '#c084fc')
+    ctx.fillStyle = logoGrad
+    ctx.beginPath()
+    ctx.arc(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.font = '48px Inter, system-ui, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#fff'
+    ctx.fillText('🎧', logoX + logoSize / 2, logoY + logoSize / 2 + 4)
+    ctx.restore()
+  }
+
+  // === Text: Omni Player Music ===
   ctx.save()
   ctx.font = 'bold 42px Inter, system-ui, sans-serif'
   ctx.fillStyle = '#ffffff'
