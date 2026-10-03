@@ -76,22 +76,36 @@ export const viewport: Viewport = {
   maximumScale: 1,
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   return (
     <html lang="id" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content={SITE_CONFIG.shortName} />
+        <meta
+          name="apple-mobile-web-app-status-bar-style"
+          content="black-translucent"
+        />
+        <meta
+          name="apple-mobile-web-app-title"
+          content={SITE_CONFIG.shortName}
+        />
         <meta name="msapplication-TileColor" content="#ff2d55" />
         <meta name="msapplication-TileImage" content="/icon.png" />
       </head>
       <body className={inter.className}>
         <LoadingScreen />
         <Navbar />
-        <main className="min-h-screen pt-20 pb-40">{children}</main>
+        <main className="min-h-screen pt-20 pb-28">{children}</main>
         <GlobalPlayer />
       </body>
     </html>
