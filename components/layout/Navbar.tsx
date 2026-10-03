@@ -4,14 +4,24 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { SITE_CONFIG } from '@/lib/constants'
-import { Home, History, Info, Heart, ListMusic, Radio } from 'lucide-react'
+import {
+  Home,
+  History,
+  Info,
+  Heart,
+  ListMusic,
+  Radio,
+  BarChart3,
+} from 'lucide-react'
 import { clsx } from 'clsx'
+import ThemeSwitcher from './ThemeSwitcher'
 
 const icons: Record<string, React.ReactNode> = {
   '/': <Home size={18} />,
   '/favorites': <Heart size={18} fill="currentColor" />,
   '/playlists': <ListMusic size={18} />,
   '/history': <History size={18} />,
+  '/stats': <BarChart3 size={18} />,
   '/about': <Info size={18} />,
   '/channel': <Radio size={18} />,
 }
@@ -43,32 +53,32 @@ export default function Navbar() {
           </div>
         </Link>
 
-        <div
-          className="flex items-center gap-1 overflow-x-auto"
-          style={{
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none',
-          }}
-        >
-          {SITE_CONFIG.nav.map((item) => {
-            const active =
-              pathname === item.href || pathname.startsWith(item.href + '/')
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={clsx(
-                  'flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold transition-all flex-none',
-                  active
-                    ? 'bg-brand/15 text-brand border border-brand/30'
-                    : 'text-white/60 hover:text-white hover:bg-white/5 border border-transparent'
-                )}
-              >
-                {icons[item.href]}
-                <span className="hidden md:inline">{item.label}</span>
-              </Link>
-            )
-          })}
+        <div className="flex items-center gap-2">
+          <div
+            className="flex items-center gap-1 overflow-x-auto"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
+            {SITE_CONFIG.nav.map((item) => {
+              const active =
+                pathname === item.href || pathname.startsWith(item.href + '/')
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={clsx(
+                    'flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold transition-all flex-none',
+                    active
+                      ? 'bg-brand/15 text-brand border border-brand/30'
+                      : 'text-white/60 hover:text-white hover:bg-white/5 border border-transparent'
+                  )}
+                >
+                  {icons[item.href]}
+                  <span className="hidden lg:inline">{item.label}</span>
+                </Link>
+              )
+            })}
+          </div>
+          <ThemeSwitcher />
         </div>
       </div>
     </nav>
