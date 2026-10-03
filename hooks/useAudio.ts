@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
 import { useStatsStore } from '@/store/statsStore'
+import { useAudioFxStore, EQ_BANDS, BASS_FREQ } from '@/store/audioFxStore'
 import { setAnalyser } from '@/lib/audioAnalyser'
 
 const PRIMARY_API = 'https://api.ikyyxd.my.id/search/ytplayv2'
@@ -12,28 +13,20 @@ async function fetchFromIkyyxd(query: string): Promise<any> {
   const apiUrl = `${PRIMARY_API}?q=${encodeURIComponent(query)}`
 
   try {
-    console.log(`[Audio] Direct API: ${apiUrl}`)
     const res = await fetch(apiUrl, { headers: { Accept: 'application/json' } })
     if (res.ok) {
       const json = await res.json()
-      if (json.status && json.result?.audio?.url) {
-        console.log('[Audio] ✅ API direct success')
-        return json
-      }
+      if (json.status && json.result?.audio?.url) return json
     }
   } catch (e: any) {
     console.warn('[Audio] API direct blocked:', e.message)
   }
 
-  console.log('[Audio] 🔄 Trying CORS proxy for API...')
   const proxyUrl = `${CORS_PROXY}${encodeURIComponent(apiUrl)}`
   const res2 = await fetch(proxyUrl)
   if (!res2.ok) throw new Error(`API proxy error ${res2.status}`)
   const json2 = await res2.json()
-  if (!json2.status || !json2.result?.audio?.url) {
-    throw new Error('Lagu tidak ditemukan')
-  }
-  console.log('[Audio] ✅ API proxy success')
+  if (!json2.status || !json2.result?.audio?.url) throw new Error('Lagu tidak ditemukan')
   return json2
 }
 
@@ -42,6 +35,12 @@ export function useAudio() {
   const ctxRef = useRef<AudioContext | null>(null)
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
+
+  // === AUDIO FX NODES ===
+  const preampRef = useRef<GainNode | null>(null)
+  const bandFiltersRef = useRef<BiquadFilterNode[]>([])
+  const bassBoostRef = useRef<BiquadFilterNode | null>(null)
+
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
@@ -53,7 +52,15 @@ export function useAudio() {
   const setCurrentTime = usePlayerStore((s) => s.setCurrentTime)
   const setDuration = usePlayerStore((s) => s.setDuration)
 
-  // === INIT AUDIO + WEB AUDIO API ===
+  // === AUDIO FX STATE ===
+  const fxEnabled = useAudioFxStore((s) => s.enabled)
+  const fxGains = useAudioFxStore((s) => s.gains)
+  const fxBass = useAudioFxStore((s) => s.bassBoost)
+  const fxPreamp = useAudioFxStore((s) => s.preamp)
+
+  // ============================================================
+  // INIT AUDIO + AUDIO CHAIN (sekali)
+  // ============================================================
   useEffect(() => {
     if (typeof window === 'undefined') return
 
@@ -62,32 +69,68 @@ export function useAudio() {
     audio.crossOrigin = 'anonymous'
     audioRef.current = audio
 
-    // === WEB AUDIO API SETUP ===
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
       const ctx = new AudioCtx()
+
+      // === Source ===
       const source = ctx.createMediaElementSource(audio)
+
+      // === Preamp gain ===
+      const preamp = ctx.createGain()
+      preamp.gain.value = 1
+
+      // === 5 Band EQ ===
+      const filters: BiquadFilterNode[] = EQ_BANDS.map((band, i) => {
+        const filter = ctx.createBiquadFilter()
+        // Band 0 = lowshelf, band 4 = highshelf, sisanya peaking
+        if (i === 0) filter.type = 'lowshelf'
+        else if (i === EQ_BANDS.length - 1) filter.type = 'highshelf'
+        else filter.type = 'peaking'
+        filter.frequency.value = band.freq
+        if (filter.type === 'peaking') filter.Q.value = 1
+        filter.gain.value = 0
+        return filter
+      })
+
+      // === Bass Boost ===
+      const bassBoost = ctx.createBiquadFilter()
+      bassBoost.type = 'lowshelf'
+      bassBoost.frequency.value = BASS_FREQ
+      bassBoost.gain.value = 0
+
+      // === Analyser ===
       const analyser = ctx.createAnalyser()
       analyser.fftSize = 128
       analyser.smoothingTimeConstant = 0.75
       analyser.minDecibels = -85
       analyser.maxDecibels = -25
 
-      source.connect(analyser)
+      // === CHAIN: source → preamp → EQ[0..4] → bassBoost → analyser → destination ===
+      source.connect(preamp)
+      let prevNode: AudioNode = preamp
+      for (const filter of filters) {
+        prevNode.connect(filter)
+        prevNode = filter
+      }
+      prevNode.connect(bassBoost)
+      bassBoost.connect(analyser)
       analyser.connect(ctx.destination)
 
       ctxRef.current = ctx
       sourceRef.current = source
+      preampRef.current = preamp
+      bandFiltersRef.current = filters
+      bassBoostRef.current = bassBoost
       analyserRef.current = analyser
       setAnalyser(analyser)
 
-      console.log('[Audio] 🎛️ Web Audio API initialized')
+      console.log('[Audio] 🎛️ Audio chain initialized (5-band EQ + Bass Boost)')
     } catch (e: any) {
-      console.warn('[Audio] Web Audio init failed:', e.message)
+      console.warn('[Audio] Audio chain init failed:', e.message)
       setAnalyser(null)
     }
 
-    // === EVENTS ===
     const onTime = () => setCurrentTime(audio.currentTime)
     const onMeta = () => {
       setDuration(audio.duration || 0)
@@ -96,12 +139,10 @@ export function useAudio() {
     }
     const onPlay = () => {
       setStatus('ready')
-      // Track stats — cuma kalau baru mulai (bukan resume)
       const c = usePlayerStore.getState().current
       if (c && audio.currentTime < 3) {
         useStatsStore.getState().trackPlay(c.artist)
       }
-      // Resume AudioContext
       const ctx = ctxRef.current
       if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {})
     }
@@ -114,7 +155,6 @@ export function useAudio() {
       }
     }
     const onError = () => {
-      console.error('[Audio] Error:', audio.error)
       setStatus('error')
       setErrorMsg('Audio gagal dimuat')
     }
@@ -141,7 +181,43 @@ export function useAudio() {
     }
   }, [setCurrentTime, setDuration])
 
-  // === LOAD SONG ===
+  // ============================================================
+  // APPLY EQ SETTINGS SAAT BERUBAH
+  // ============================================================
+  useEffect(() => {
+    const ctx = ctxRef.current
+    if (!ctx) return
+    const now = ctx.currentTime
+
+    const preamp = preampRef.current
+    const bassBoost = bassBoostRef.current
+    const filters = bandFiltersRef.current
+
+    if (fxEnabled) {
+      if (preamp) {
+        // preamp: dB → gain multiplier (10^(dB/20))
+        const g = Math.pow(10, fxPreamp / 20)
+        preamp.gain.setTargetAtTime(g, now, 0.05)
+      }
+      filters.forEach((f, i) => {
+        const v = fxGains[i] ?? 0
+        f.gain.setTargetAtTime(v, now, 0.05)
+      })
+      if (bassBoost) {
+        bassBoost.gain.setTargetAtTime(fxBass, now, 0.05)
+      }
+      console.log('[Audio] 🎛️ FX applied', { gains: fxGains, bass: fxBass, preamp: fxPreamp })
+    } else {
+      // Reset ke flat
+      if (preamp) preamp.gain.setTargetAtTime(1, now, 0.05)
+      filters.forEach((f) => f.gain.setTargetAtTime(0, now, 0.05))
+      if (bassBoost) bassBoost.gain.setTargetAtTime(0, now, 0.05)
+    }
+  }, [fxEnabled, fxGains, fxBass, fxPreamp])
+
+  // ============================================================
+  // LOAD SONG
+  // ============================================================
   useEffect(() => {
     const audio = audioRef.current
     if (!audio || !current) return
@@ -155,28 +231,21 @@ export function useAudio() {
       audio.pause()
       audio.removeAttribute('src')
 
-      console.log(`[Audio] Loading: "${query}"`)
-
       try {
         const json = await fetchFromIkyyxd(query)
         if (cancelled) return
-
         const upstreamUrl: string = json.result.audio.url
         const proxied = `/api/audio?url=${encodeURIComponent(upstreamUrl)}`
-        console.log(`[Audio] 🔊 Using Edge proxy`)
-
         audio.src = proxied
         audio.load()
       } catch (e: any) {
         if (cancelled) return
-        console.error('[Audio] ❌ Failed:', e.message)
         setStatus('error')
         setErrorMsg(e.message || 'Gagal memuat audio')
       }
     }
 
     loadAudio()
-
     return () => {
       cancelled = true
     }
@@ -230,14 +299,12 @@ export function useAudio() {
     const audio = audioRef.current
     if (!audio) return
     try {
-      audio.currentTime = Math.max(0, Math.min(audio.duration || 0, audio.currentTime + delta))
+      audio.currentTime = Math.max(
+        0,
+        Math.min(audio.duration || 0, audio.currentTime + delta)
+      )
     } catch {}
   }, [])
 
-  return {
-    status,
-    errorMsg,
-    seek,
-    seekRelative,
-  }
+  return { status, errorMsg, seek, seekRelative }
 }
