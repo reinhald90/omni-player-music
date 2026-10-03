@@ -9,6 +9,7 @@ import Visualizer from './Visualizer'
 import Lyrics from './Lyrics'
 import QueuePanel from './QueuePanel'
 import SleepTimerPanel from './SleepTimerPanel'
+import ShareCardModal from '@/components/share/ShareCardModal'
 import {
   ChevronDown, Play, Pause, SkipBack, SkipForward, Repeat, Shuffle,
   Heart, Volume2, VolumeX, Volume1, Mic2, Disc3,
@@ -50,6 +51,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
   const [showLyrics, setShowLyrics] = useState(false)
   const [queueOpen, setQueueOpen] = useState(false)
   const [timerOpen, setTimerOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const [swipeY, setSwipeY] = useState(0)
   const swipeStart = useRef<number | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -145,18 +147,6 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
     } catch (e: any) {
       showToast(e.message || 'Gagal download')
     }
-  }
-
-  const handleShare = async () => {
-    const text = `🎵 ${current.title}\n👤 ${current.artist}\n\nDengerin gratis di Omni Player Music:\nhttps://omniplayermusic.web.id`
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: current.title, text })
-      } else {
-        await navigator.clipboard.writeText(text)
-        showToast('Link disalin!')
-      }
-    } catch {}
   }
 
   const handleFavorite = () => {
@@ -396,7 +386,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
             Simpan
           </button>
           <button
-            onClick={handleShare}
+            onClick={() => setShareOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 text-white/50 hover:text-white/80 hover:bg-white/10 text-[10px] font-bold uppercase tracking-wider transition-all active:scale-95"
           >
             <Share2 size={11} />
@@ -432,6 +422,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
 
       <QueuePanel open={queueOpen} onClose={() => setQueueOpen(false)} />
       <SleepTimerPanel open={timerOpen} onClose={() => setTimerOpen(false)} />
+      <ShareCardModal open={shareOpen} onClose={() => setShareOpen(false)} />
     </div>
   )
 }
