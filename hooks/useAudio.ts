@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
+import { useStatsStore } from '@/store/statsStore'
 import { setAnalyser } from '@/lib/audioAnalyser'
 
 const PRIMARY_API = 'https://api.ikyyxd.my.id/search/ytplayv2'
@@ -52,13 +53,12 @@ export function useAudio() {
   const setCurrentTime = usePlayerStore((s) => s.setCurrentTime)
   const setDuration = usePlayerStore((s) => s.setDuration)
 
-  // === INIT AUDIO + WEB AUDIO API (sekali) ===
+  // === INIT AUDIO + WEB AUDIO API ===
   useEffect(() => {
     if (typeof window === 'undefined') return
 
     const audio = new Audio()
     audio.preload = 'auto'
-    // ✅ PENTING: WAJIB crossOrigin untuk Web Audio API
     audio.crossOrigin = 'anonymous'
     audioRef.current = audio
 
@@ -68,7 +68,7 @@ export function useAudio() {
       const ctx = new AudioCtx()
       const source = ctx.createMediaElementSource(audio)
       const analyser = ctx.createAnalyser()
-      analyser.fftSize = 128 // 64 bins → 64 batang
+      analyser.fftSize = 128
       analyser.smoothingTimeConstant = 0.75
       analyser.minDecibels = -85
       analyser.maxDecibels = -25
@@ -87,7 +87,7 @@ export function useAudio() {
       setAnalyser(null)
     }
 
-    // === EVENT LISTENERS ===
+    // === EVENTS ===
     const onTime = () => setCurrentTime(audio.currentTime)
     const onMeta = () => {
       setDuration(audio.duration || 0)
@@ -96,7 +96,12 @@ export function useAudio() {
     }
     const onPlay = () => {
       setStatus('ready')
-      // Resume AudioContext (browser sering suspend)
+      // Track stats — cuma kalau baru mulai (bukan resume)
+      const c = usePlayerStore.getState().current
+      if (c && audio.currentTime < 3) {
+        useStatsStore.getState().trackPlay(c.artist)
+      }
+      // Resume AudioContext
       const ctx = ctxRef.current
       if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {})
     }
@@ -153,14 +158,10 @@ export function useAudio() {
       console.log(`[Audio] Loading: "${query}"`)
 
       try {
-        // Step 1: Dapatkan URL audio dari API
         const json = await fetchFromIkyyxd(query)
         if (cancelled) return
 
         const upstreamUrl: string = json.result.audio.url
-        console.log(`[Audio] ✅ Upstream URL: ${upstreamUrl.slice(0, 80)}...`)
-
-        // Step 2: Route via proxy Edge kita (biar CORS bersih untuk AnalyserNode)
         const proxied = `/api/audio?url=${encodeURIComponent(upstreamUrl)}`
         console.log(`[Audio] 🔊 Using Edge proxy`)
 
