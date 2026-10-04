@@ -42,7 +42,12 @@ interface Props {
   onSeekRelative: (delta: number) => void
 }
 
-export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }: Props) {
+export default function FullPlayer({
+  status,
+  errorMsg,
+  onSeek,
+  onSeekRelative,
+}: Props) {
   const current = usePlayerStore((s) => s.current)
   const isPlaying = usePlayerStore((s) => s.isPlaying)
   const currentTime = usePlayerStore((s) => s.currentTime)
@@ -60,7 +65,9 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
   const next = usePlayerStore((s) => s.next)
   const prev = usePlayerStore((s) => s.prev)
 
-  const isFav = useFavoritesStore((s) => (current ? s.isFavorite(current.id) : false))
+  const isFav = useFavoritesStore((s) =>
+    current ? s.isFavorite(current.id) : false
+  )
   const toggleFav = useFavoritesStore((s) => s.toggle)
 
   const barRef = useRef<HTMLDivElement | null>(null)
@@ -76,17 +83,22 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
   const swipeStart = useRef<number | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
+  // Keyboard shortcut: seek
   useEffect(() => {
     const handler = (e: any) => onSeekRelative(e.detail || 0)
     document.addEventListener('omni:seek', handler as EventListener)
-    return () => document.removeEventListener('omni:seek', handler as EventListener)
+    return () =>
+      document.removeEventListener('omni:seek', handler as EventListener)
   }, [onSeekRelative])
 
+  // Sleep timer display
   const [sleepRemaining, setSleepRemaining] = useState(0)
   useEffect(() => {
     if (!sleepEnd) return setSleepRemaining(0)
     const tick = () =>
-      setSleepRemaining(Math.max(0, Math.floor((sleepEnd - Date.now()) / 1000)))
+      setSleepRemaining(
+        Math.max(0, Math.floor((sleepEnd - Date.now()) / 1000))
+      )
     tick()
     const int = setInterval(tick, 1000)
     return () => clearInterval(int)
@@ -102,7 +114,8 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
   const displayTime = dragging ? dragTime : currentTime
   const progress = duration > 0 ? (displayTime / duration) * 100 : 0
   const remaining = Math.max(0, duration - displayTime)
-  const VolumeIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2
+  const VolumeIcon =
+    muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2
 
   const getTimeFromEvent = (clientX: number) => {
     if (!barRef.current || !duration) return 0
@@ -110,6 +123,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
     const px = Math.max(0, Math.min(clientX - rect.left, rect.width))
     return (px / rect.width) * duration
   }
+
   const onPointerDown = (e: React.PointerEvent) => {
     setDragging(true)
     setDragTime(getTimeFromEvent(e.clientX))
@@ -126,6 +140,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
     ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
   }
 
+  // Swipe down to close
   const onSwipeStart = (y: number) => {
     swipeStart.current = y
   }
@@ -148,17 +163,21 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
       )
       const json = await res.json()
       if (!json.success) throw new Error(json.error || 'Gagal ambil audio')
+
       const audioUrl = json.data.audioUrl
       const safeName = `${current.title.replace(/[^\w\s]/g, '').trim()}.mp3`
+
       const downloadUrl = `/api/audio?url=${encodeURIComponent(
         audioUrl
       )}&download=1&filename=${encodeURIComponent(safeName)}`
+
       const a = document.createElement('a')
       a.href = downloadUrl
       a.download = safeName
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
+
       showToast('Download dimulai! 🎧')
     } catch (e: any) {
       showToast(e.message || 'Gagal download')
@@ -178,6 +197,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
       onTouchMove={(e) => onSwipeMove(e.touches[0].clientY)}
       onTouchEnd={onSwipeEnd}
     >
+      {/* ============ AMBIENT BLUR BG ============ */}
       <div className="absolute inset-0 -z-10">
         <Image
           src={current.thumbnail}
@@ -189,16 +209,19 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/70 to-black/95" />
       </div>
 
+      {/* ============ TOAST ============ */}
       {toast && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-black/80 backdrop-blur-xl border border-white/10 text-xs font-bold animate-[fadeIn_0.2s] whitespace-nowrap">
           {toast}
         </div>
       )}
 
+      {/* ============ HEADER ============ */}
       <header className="flex items-center justify-between px-5 pt-5 pb-3 flex-none">
         <button
           onClick={closeFull}
           className="w-10 h-10 rounded-full flex items-center justify-center bg-white/[0.07] backdrop-blur-xl border border-white/10 text-white/90 hover:bg-white/15 transition-all active:scale-90"
+          aria-label="Tutup"
         >
           <ChevronDown size={20} />
         </button>
@@ -206,7 +229,9 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
         <div className="text-center flex-1 min-w-0 px-3">
           <div className="text-[10px] font-semibold tracking-[0.25em] uppercase text-white/40">
             {sleepEnd
-              ? `⏱️ ${Math.floor(sleepRemaining / 60)}:${String(sleepRemaining % 60).padStart(2, '0')}`
+              ? `⏱️ ${Math.floor(sleepRemaining / 60)}:${String(
+                  sleepRemaining % 60
+                ).padStart(2, '0')}`
               : showLyrics
                 ? 'Lirik'
                 : 'Sedang Diputar'}
@@ -224,12 +249,15 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
               ? 'bg-brand/20 backdrop-blur-xl border border-brand/40 text-brand'
               : 'bg-white/[0.07] backdrop-blur-xl border border-white/10 text-white/90 hover:bg-white/15'
           )}
+          aria-label="Favorit"
         >
           <Heart size={18} fill={isFav ? 'currentColor' : 'none'} />
         </button>
       </header>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-2 min-h-0 gap-4">
+      {/* ============ MAIN — COVER / LYRICS + VISUALIZER ============ */}
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-2 min-h-0 gap-3">
+        {/* Cover / Lyrics */}
         <button
           onClick={() => setShowLyrics((v) => !v)}
           className="relative w-full max-w-[320px] aspect-square rounded-[28px] overflow-hidden shadow-[0_40px_100px_-20px_rgba(0,0,0,0.95),0_20px_40px_-15px_rgba(255,45,85,0.15)] ring-1 ring-white/5 active:scale-[0.98] transition-transform"
@@ -257,12 +285,15 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           )}
         </button>
 
+        {/* Toggle Cover / Lirik */}
         <div className="flex items-center justify-between w-full max-w-[320px] px-1">
           <button
             onClick={() => setShowLyrics(false)}
             className={clsx(
               'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all',
-              !showLyrics ? 'bg-white/15 text-white' : 'bg-white/5 text-white/40 hover:text-white/70'
+              !showLyrics
+                ? 'bg-white/15 text-white'
+                : 'bg-white/5 text-white/40 hover:text-white/70'
             )}
           >
             <Disc3 size={11} />
@@ -272,7 +303,9 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
             onClick={() => setShowLyrics(true)}
             className={clsx(
               'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all',
-              showLyrics ? 'bg-white/15 text-white' : 'bg-white/5 text-white/40 hover:text-white/70'
+              showLyrics
+                ? 'bg-white/15 text-white'
+                : 'bg-white/5 text-white/40 hover:text-white/70'
             )}
           >
             <Mic2 size={11} />
@@ -280,14 +313,17 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           </button>
         </div>
 
+        {/* ============ 3-IN-1 VISUALIZER ============ */}
         {!showLyrics && (
-          <div className="w-full max-w-[320px]">
-            <Visualizer variant="full" />
+          <div className="w-full max-w-[340px] mt-1">
+            <Visualizer variant="full" height={140} />
           </div>
         )}
       </div>
 
+      {/* ============ INFO + CONTROLS ============ */}
       <div className="flex-none px-6 pb-8 space-y-5">
+        {/* Title */}
         <div className="text-center px-2">
           <h2 className="text-[20px] leading-tight font-bold text-white truncate">
             {current.title}
@@ -300,6 +336,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           )}
         </div>
 
+        {/* Progress */}
         <div className="px-1">
           <div
             ref={barRef}
@@ -328,10 +365,12 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           </div>
         </div>
 
+        {/* Main Controls */}
         <div className="flex items-center justify-center gap-6 sm:gap-8">
           <button
             onClick={() => setQueueOpen(true)}
             className="relative text-white/40 hover:text-white/70 transition-colors p-1"
+            aria-label="Antrian"
           >
             <ListMusic size={18} />
             {queue.length > 0 && (
@@ -344,6 +383,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           <button
             onClick={prev}
             className="text-white/90 hover:text-white transition-colors p-1 active:scale-90"
+            aria-label="Sebelumnya"
           >
             <SkipBack size={26} fill="currentColor" />
           </button>
@@ -352,6 +392,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
             onClick={toggle}
             disabled={status === 'loading'}
             className="w-[68px] h-[68px] rounded-full bg-white text-black flex items-center justify-center shadow-[0_16px_40px_-8px_rgba(255,255,255,0.35),0_8px_20px_-6px_rgba(0,0,0,0.5)] hover:scale-[1.04] active:scale-95 transition-transform disabled:opacity-60"
+            aria-label={isPlaying ? 'Jeda' : 'Putar'}
           >
             {status === 'loading' ? (
               <div className="w-6 h-6 border-[3px] border-black/20 border-t-black rounded-full animate-spin" />
@@ -365,6 +406,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           <button
             onClick={next}
             className="text-white/90 hover:text-white transition-colors p-1 active:scale-90"
+            aria-label="Berikutnya"
           >
             <SkipForward size={26} fill="currentColor" />
           </button>
@@ -375,6 +417,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
               'transition-colors p-1',
               loop ? 'text-brand' : 'text-white/40 hover:text-white/70'
             )}
+            aria-label="Ulangi"
           >
             <Repeat size={18} />
           </button>
@@ -424,10 +467,12 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
           </button>
         </div>
 
+        {/* Volume */}
         <div className="flex items-center gap-3 pt-1 px-1">
           <button
             onClick={toggleMute}
             className="text-white/35 hover:text-white/70 transition-colors flex-none"
+            aria-label="Bisukan"
           >
             <VolumeIcon size={16} />
           </button>
@@ -450,6 +495,7 @@ export default function FullPlayer({ status, errorMsg, onSeek, onSeekRelative }:
         </div>
       </div>
 
+      {/* ============ PANELS ============ */}
       <QueuePanel open={queueOpen} onClose={() => setQueueOpen(false)} />
       <SleepTimerPanel open={timerOpen} onClose={() => setTimerOpen(false)} />
       <ShareCardModal open={shareOpen} onClose={() => setShareOpen(false)} />
