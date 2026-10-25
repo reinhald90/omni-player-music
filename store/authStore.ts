@@ -16,6 +16,7 @@ export interface User {
   name: string
   email: string
   avatar?: string
+  coverUrl?: string
   joinedAt?: number
   role?: string
   isVerified?: boolean
@@ -35,6 +36,7 @@ interface AuthState {
   logout: () => Promise<void>
   clearError: () => void
   refreshUserStatus: () => Promise<void>
+  updateProfileData: (data: { name?: string, avatar?: string, coverUrl?: string }) => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -57,11 +59,52 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           user: { 
             ...currentUser, 
             role: json.role, 
-            isVerified: json.is_verified 
+            isVerified: json.is_verified,
+            coverUrl: json.cover_url || currentUser.coverUrl
           } 
         })
       }
     } catch (e) { console.error(e) }
+  },
+
+  updateProfileData: async (data) => {
+    const currentUser = get().user
+    if (!currentUser) return
+
+    try {
+      // 1. Update ke Neon DB
+      await fetch('/api/db/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          uid: currentUser.id, 
+          name: data.name, 
+          avatar_url: data.avatar,
+          cover_url: data.coverUrl
+        })
+      })
+
+      // 2. Update ke Firebase Auth (Hanya Nama & Avatar)
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, {
+          displayName: data.name || auth.currentUser.displayName,
+          photoURL: data.avatar || auth.currentUser.photoURL
+        })
+      }
+
+      // 3. Update state lokal Zustand
+      set({
+        user: {
+          ...currentUser,
+          name: data.name || currentUser.name,
+          avatar: data.avatar || currentUser.avatar,
+          coverUrl: data.coverUrl || currentUser.coverUrl
+        }
+      })
+    } catch (e) {
+      console.error('Gagal update profil:', e)
+      throw e
+    }
   },
 
   initAuth: () => {
@@ -78,7 +121,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isAuthenticated: true,
           initialized: true,
         })
-        // Tarik status Role & Verified dari Neon DB
         get().refreshUserStatus()
       } else {
         set({ user: null, isAuthenticated: false, initialized: true })
