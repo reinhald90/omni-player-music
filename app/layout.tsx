@@ -5,6 +5,7 @@ import { SITE_CONFIG } from '@/lib/constants'
 import Navbar from '@/components/layout/Navbar'
 import GlobalPlayer from '@/components/player/GlobalPlayer'
 import LoadingScreen from '@/components/layout/LoadingScreen'
+import AuthProvider from '@/components/auth/AuthProvider'
 
 const inter = Inter({ subsets: ['latin'], display: 'swap' })
 
@@ -103,10 +104,13 @@ export default function RootLayout({
         <meta name="msapplication-TileImage" content="/icon.png" />
       </head>
       <body className={inter.className}>
-        <LoadingScreen />
-        <Navbar />
-        <main className="min-h-screen pt-20 pb-28">{children}</main>
-        <GlobalPlayer />
+        {/* Bungkus semua dengan AuthProvider agar status login Firebase terbaca di seluruh aplikasi */}
+        <AuthProvider>
+          <LoadingScreen />
+          <Navbar />
+          <main className="min-h-screen pt-20 pb-40">{children}</main>
+          <GlobalPlayer />
+        </AuthProvider>
       </body>
     </html>
   )
