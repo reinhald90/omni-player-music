@@ -23,7 +23,6 @@ export const useFavoritesStore = create<FavoritesState>()(
         if (existing) return
         set({ items: [song, ...get().items] })
         
-        // Sync ke DB
         const user = useAuthStore.getState().user
         if (user) {
           fetch('/api/db/favorites', {
@@ -37,7 +36,6 @@ export const useFavoritesStore = create<FavoritesState>()(
       remove: (id) => {
         set({ items: get().items.filter((s) => s.id !== id) })
         
-        // Sync ke DB
         const user = useAuthStore.getState().user
         if (user) {
           fetch(`/api/db/favorites?uid=${user.id}&songId=${id}`, { method: 'DELETE' })
@@ -51,16 +49,22 @@ export const useFavoritesStore = create<FavoritesState>()(
       },
 
       isFavorite: (id) => get().items.some((s) => s.id === id),
-      clear: () => set({ items: [] }),
       
-      // Fungsi untuk ambil data dari Neon pas login
+      clear: () => set({ items: [] }), // <-- Ini yang dipanggil saat logout
+      
       syncFromDb: async () => {
         const user = useAuthStore.getState().user
         if (!user) return
+        
+        // Kosongkan dulu sementara (mencegah data user lama nyangkut)
+        set({ items: [] })
+        
         try {
           const res = await fetch(`/api/db/favorites?uid=${user.id}`)
           const json = await res.json()
-          if (json.success) set({ items: json.data })
+          if (json.success) {
+            set({ items: json.data }) // Timpa dengan data dari server
+          }
         } catch (e) { console.error(e) }
       }
     }),
