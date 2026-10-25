@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app'
-import { getAuth, GoogleAuthProvider } from 'firebase/auth'
+import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from 'firebase/auth'
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -11,9 +11,13 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 }
 
-// Cegah inisialisasi ganda di Next.js
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp()
 const auth = getAuth(app)
 const googleProvider = new GoogleAuthProvider()
+
+// 🔥 PENTING: Paksa Firebase ingat login user di browser
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.error('Gagal set persistence Firebase:', err)
+})
 
 export { app, auth, googleProvider }
