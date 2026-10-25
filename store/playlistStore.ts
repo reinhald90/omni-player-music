@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Song } from '@/types'
+import { useAuthStore } from './authStore'
 
 export interface Playlist {
   id: string
@@ -22,6 +23,7 @@ interface PlaylistState {
   removeSong: (playlistId: string, songId: string) => void
   clear: () => void
   get: (id: string) => Playlist | undefined
+  syncFromDb: () => Promise<void>
 }
 
 const genId = () =>
@@ -33,35 +35,41 @@ export const usePlaylistStore = create<PlaylistState>()(
   persist(
     (set, get) => ({
       playlists: [],
+      
       create: (name, description) => {
         const id = genId()
         const now = Date.now()
-        const newPl: Playlist = {
-          id,
-          name: name.trim() || 'Playlist Baru',
-          description: description?.trim() || '',
-          songs: [],
-          createdAt: now,
-          updatedAt: now,
-        }
+        const newPl: Playlist = { id, name, description: description || '', songs: [], createdAt: now, updatedAt: now }
         set({ playlists: [newPl, ...get().playlists] })
+        
+        const user = useAuthStore.getState().user
+        if (user) {
+          fetch('/api/db/playlists', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid: user.id, email: user.email, name: user.name, action: 'create', payload: { name, description } })
+          })
+        }
         return id
       },
-      remove: (id) => set({ playlists: get().playlists.filter((p) => p.id !== id) }),
-      rename: (id, name, description) => {
-        set({
-          playlists: get().playlists.map((p) =>
-            p.id === id
-              ? {
-                  ...p,
-                  name: name.trim() || p.name,
-                  description: description !== undefined ? description.trim() : p.description,
-                  updatedAt: Date.now(),
-                }
-              : p
-          ),
-        })
+
+      remove: (id) => {
+        set({ playlists: get().playlists.filter((p) => p.id !== id) })
+        
+        const user = useAuthStore.getState().user
+        if (user) {
+          fetch('/api/db/playlists', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid: user.id, email: user.email, name: user.name, action: 'delete', payload: { id } })
+          })
+        }
       },
+
+      rename: (id, name, description) => {
+        set({ playlists: get().playlists.map((p) => p.id === id ? { ...p, name, description: description !== undefined ? description : p.description, updatedAt: Date.now() } : p) })
+      },
+
       addSong: (playlistId, song) => {
         set({
           playlists: get().playlists.map((p) => {
@@ -70,7 +78,17 @@ export const usePlaylistStore = create<PlaylistState>()(
             return { ...p, songs: [...p.songs, song], updatedAt: Date.now() }
           }),
         })
+        
+        const user = useAuthStore.getState().user
+        if (user) {
+          fetch('/api/db/playlists', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid: user.id, email: user.email, name: user.name, action: 'addSong', payload: { playlistId, song } })
+          })
+        }
       },
+
       removeSong: (playlistId, songId) => {
         set({
           playlists: get().playlists.map((p) =>
@@ -79,9 +97,29 @@ export const usePlaylistStore = create<PlaylistState>()(
               : p
           ),
         })
+        
+        const user = useAuthStore.getState().user
+        if (user) {
+          fetch('/api/db/playlists', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid: user.id, email: user.email, name: user.name, action: 'removeSong', payload: { playlistId, songId } })
+          })
+        }
       },
+
       clear: () => set({ playlists: [] }),
       get: (id) => get().playlists.find((p) => p.id === id),
+      
+      syncFromDb: async () => {
+        const user = useAuthStore.getState().user
+        if (!user) return
+        try {
+          const res = await fetch(`/api/db/playlists?uid=${user.id}`)
+          const json = await res.json()
+          if (json.success) set({ playlists: json.data })
+        } catch (e) { console.error(e) }
+      }
     }),
     { name: 'omni-playlists' }
   )
