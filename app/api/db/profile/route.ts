@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 
 export const runtime = 'edge'
-// 🔥 Mematikan cache agar update langsung terlihat
 export const dynamic = 'force-dynamic' 
 
 // GET: Ambil data profile (role, verified, cover)
@@ -26,27 +25,51 @@ export async function GET(req: NextRequest) {
       cover_url: res[0].cover_url
     })
   } catch (error: any) {
-    console.error('[GET Profile Error]', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
 
-// PUT: Update Profile (Nama, Avatar, Cover)
+// POST: Daftarkan user ke DB jika belum ada (Upsert)
+export async function POST(req: NextRequest) {
+  try {
+    const { uid, name, email, avatar_url } = await req.json()
+    if (!uid) return NextResponse.json({ error: 'UID required' }, { status: 400 })
+
+    // Cek apakah user sudah ada
+    const existing = await sql`SELECT id FROM users WHERE firebase_uid = ${uid}`
+    
+    if (existing.length === 0) {
+      // Jika belum ada, daftarkan
+      await sql`
+        INSERT INTO users (firebase_uid, name, email, avatar_url)
+        VALUES (${uid}, ${name}, ${email}, ${avatar_url || null})
+      `
+    } else {
+      // Jika sudah ada, update nama/email/avatar barunya (jaga-jaga kalau ganti nama di Google)
+      await sql`
+        UPDATE users 
+        SET name = ${name}, email = ${email}, avatar_url = ${avatar_url || null}
+        WHERE firebase_uid = ${uid}
+      `
+    }
+    
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  }
+}
+
+// PUT: Update Profile (Edit Profil)
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json()
     const { uid, name, avatar_url, cover_url } = body
 
-    if (!uid) {
-      return NextResponse.json({ error: 'UID required' }, { status: 400 })
-    }
+    if (!uid) return NextResponse.json({ error: 'UID required' }, { status: 400 })
 
-    // 🔥 Cek ukuran payload (Base64 bisa sangat besar)
     const payloadSize = JSON.stringify(body).length
-    if (payloadSize > 4 * 1024 * 1024) { // Limit 4MB
-      return NextResponse.json({ 
-        error: 'Ukuran gambar terlalu besar. Gunakan gambar di bawah 3MB.' 
-      }, { status: 413 })
+    if (payloadSize > 4 * 1024 * 1024) { 
+      return NextResponse.json({ error: 'Ukuran gambar terlalu besar.' }, { status: 413 })
     }
 
     await sql`
@@ -61,11 +84,6 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error('[PUT Profile Error]', error)
-    // Kirim pesan error yang lebih informatif
-    return NextResponse.json({ 
-      success: false, 
-      error: error.message || 'Terjadi kesalahan pada server' 
-    }, { status: 500 })
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
