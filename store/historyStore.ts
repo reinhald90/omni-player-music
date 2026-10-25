@@ -15,12 +15,12 @@ export const useHistoryStore = create<HistoryState>()(
   persist(
     (set, get) => ({
       items: [],
+      
       add: (song) => {
         const filtered = get().items.filter((i) => i.id !== song.id)
         const newItem: HistoryItem = { ...song, playedAt: Date.now() }
         set({ items: [newItem, ...filtered].slice(0, 100) })
         
-        // Sync ke DB
         const user = useAuthStore.getState().user
         if (user) {
           fetch('/api/db/history', {
@@ -30,16 +30,23 @@ export const useHistoryStore = create<HistoryState>()(
           })
         }
       },
-      clear: () => set({ items: [] }),
+      
+      clear: () => set({ items: [] }), // <-- Untuk logout
+      
       remove: (id) => set({ items: get().items.filter((i) => i.id !== id) }),
       
       syncFromDb: async () => {
         const user = useAuthStore.getState().user
         if (!user) return
+        
+        set({ items: [] }) // Kosongkan dulu
+        
         try {
           const res = await fetch(`/api/db/history?uid=${user.id}`)
           const json = await res.json()
-          if (json.success) set({ items: json.data })
+          if (json.success) {
+            set({ items: json.data })
+          }
         } catch (e) { console.error(e) }
       }
     }),
