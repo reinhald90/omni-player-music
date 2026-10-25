@@ -55,7 +55,6 @@ export const usePlaylistStore = create<PlaylistState>()(
 
       remove: (id) => {
         set({ playlists: get().playlists.filter((p) => p.id !== id) })
-        
         const user = useAuthStore.getState().user
         if (user) {
           fetch('/api/db/playlists', {
@@ -78,7 +77,6 @@ export const usePlaylistStore = create<PlaylistState>()(
             return { ...p, songs: [...p.songs, song], updatedAt: Date.now() }
           }),
         })
-        
         const user = useAuthStore.getState().user
         if (user) {
           fetch('/api/db/playlists', {
@@ -92,12 +90,9 @@ export const usePlaylistStore = create<PlaylistState>()(
       removeSong: (playlistId, songId) => {
         set({
           playlists: get().playlists.map((p) =>
-            p.id === playlistId
-              ? { ...p, songs: p.songs.filter((s) => s.id !== songId), updatedAt: Date.now() }
-              : p
+            p.id === playlistId ? { ...p, songs: p.songs.filter((s) => s.id !== songId), updatedAt: Date.now() } : p
           ),
         })
-        
         const user = useAuthStore.getState().user
         if (user) {
           fetch('/api/db/playlists', {
@@ -108,16 +103,22 @@ export const usePlaylistStore = create<PlaylistState>()(
         }
       },
 
-      clear: () => set({ playlists: [] }),
+      clear: () => set({ playlists: [] }), // <-- Untuk logout
+      
       get: (id) => get().playlists.find((p) => p.id === id),
       
       syncFromDb: async () => {
         const user = useAuthStore.getState().user
         if (!user) return
+        
+        set({ playlists: [] }) // Kosongkan dulu
+        
         try {
           const res = await fetch(`/api/db/playlists?uid=${user.id}`)
           const json = await res.json()
-          if (json.success) set({ playlists: json.data })
+          if (json.success) {
+            set({ playlists: json.data })
+          }
         } catch (e) { console.error(e) }
       }
     }),
