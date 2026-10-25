@@ -17,6 +17,8 @@ export interface User {
   email: string
   avatar?: string
   joinedAt?: number
+  role?: string
+  isVerified?: boolean
 }
 
 interface AuthState {
@@ -32,9 +34,10 @@ interface AuthState {
   loginGoogle: () => Promise<void>
   logout: () => Promise<void>
   clearError: () => void
+  refreshUserStatus: () => Promise<void>
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   loading: false,
@@ -43,8 +46,26 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   clearError: () => set({ error: null }),
 
+  refreshUserStatus: async () => {
+    const currentUser = get().user
+    if (!currentUser) return
+    try {
+      const res = await fetch(`/api/db/profile?uid=${currentUser.id}`)
+      const json = await res.json()
+      if (json.success) {
+        set({ 
+          user: { 
+            ...currentUser, 
+            role: json.role, 
+            isVerified: json.is_verified 
+          } 
+        })
+      }
+    } catch (e) { console.error(e) }
+  },
+
   initAuth: () => {
-    onAuthStateChanged(auth, (firebaseUser) => {
+    onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         set({
           user: {
@@ -57,6 +78,8 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           initialized: true,
         })
+        // Tarik status Role & Verified dari Neon DB
+        get().refreshUserStatus()
       } else {
         set({ user: null, isAuthenticated: false, initialized: true })
       }
