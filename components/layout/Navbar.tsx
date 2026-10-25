@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { Menu, LogIn, UserPlus, LogOut, ChevronDown } from 'lucide-react'
+import { Menu, LogIn, UserPlus, LogOut, ChevronDown, User as UserIcon } from 'lucide-react'
 import { SITE_CONFIG } from '@/lib/constants'
 import { useAuthStore } from '@/store/authStore'
 import Sidebar from './Sidebar'
@@ -118,8 +118,12 @@ export default function Navbar() {
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
                   className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-95"
                 >
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-white text-xs font-black shadow-md">
-                    {user?.name?.charAt(0).toUpperCase() || '?'}
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-white text-xs font-black shadow-md overflow-hidden">
+                    {user?.avatar ? (
+                      <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                    ) : (
+                      user?.name?.charAt(0).toUpperCase() || '?'
+                    )}
                   </div>
                   <span className="hidden sm:inline text-xs font-bold text-white truncate max-w-[80px]">
                     {user?.name?.split(' ')[0]}
@@ -132,8 +136,12 @@ export default function Navbar() {
                   <div className="absolute right-0 top-12 z-50 w-56 rounded-2xl glass-strong border border-white/10 shadow-2xl overflow-hidden animate-[fadeIn_0.15s]">
                     <div className="p-3 border-b border-white/5">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-white text-sm font-black flex-none shadow-md">
-                          {user?.name?.charAt(0).toUpperCase() || '?'}
+                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-white text-sm font-black flex-none shadow-md overflow-hidden">
+                          {user?.avatar ? (
+                            <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                          ) : (
+                            user?.name?.charAt(0).toUpperCase() || '?'
+                          )}
                         </div>
                         <div className="min-w-0">
                           <div className="text-xs font-bold truncate">{user?.name}</div>
@@ -141,7 +149,15 @@ export default function Navbar() {
                         </div>
                       </div>
                     </div>
-                    <div className="p-1.5">
+                    <div className="p-1.5 space-y-0.5">
+                      <Link
+                        href="/profile"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-bold text-white/80 hover:bg-white/10 transition-all text-left"
+                      >
+                        <UserIcon size={14} />
+                        Profil Saya
+                      </Link>
                       <button
                         onClick={() => {
                           logout()
