@@ -13,12 +13,14 @@ import {
   Info,
   Radio,
   ExternalLink,
+  MessageSquare,
 } from 'lucide-react'
 import { SITE_CONFIG } from '@/lib/constants'
 import { clsx } from 'clsx'
 
 const NAV_ITEMS = [
   { href: '/', icon: Home, label: 'Beranda', desc: 'Cari & putar lagu' },
+  { href: '/chat', icon: MessageSquare, label: 'Chat Global', desc: 'Ngobrol bareng user' },
   { href: '/favorites', icon: Heart, label: 'Favorit', desc: 'Lagu kesukaanmu' },
   { href: '/playlists', icon: ListMusic, label: 'Playlist', desc: 'Koleksi pribadi' },
   { href: '/history', icon: History, label: 'Riwayat', desc: 'Yang pernah diputar' },
