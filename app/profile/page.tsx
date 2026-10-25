@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/authStore'
 import { useFavoritesStore } from '@/store/favoritesStore'
 import { usePlaylistStore } from '@/store/playlistStore'
 import { useHistoryStore } from '@/store/historyStore'
-import { BadgeCheck, LogOut, Music, ListMusic, Clock, Calendar, ShieldCheck } from 'lucide-react'
+import { BadgeCheck, LogOut, Calendar, ShieldCheck } from 'lucide-react'
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -44,31 +44,36 @@ export default function ProfilePage() {
         {/* Background Cover */}
         <div className="h-32 w-full bg-gradient-to-r from-brand via-brand-light to-brand-dark relative overflow-hidden">
           <div className="absolute inset-0 bg-black/20" />
-          {/* Efek Garis-garis */}
           <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
         </div>
 
         {/* Avatar & Info */}
         <div className="px-6 pb-6 relative">
-          {/* Avatar melayang */}
+          
+          {/* Avatar melayang di tengah */}
           <div className="absolute -top-12 left-1/2 -translate-x-1/2">
             <div className="w-24 h-24 rounded-full bg-[#0a0a0e] p-1 relative shadow-xl">
-              <div className="w-full h-full rounded-full bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-white text-3xl font-black overflow-hidden">
+              {/* Pastikan lingkaran avatar mengunci gambar */}
+              <div className="w-full h-full rounded-full bg-gradient-to-br from-brand to-brand-dark overflow-hidden flex items-center justify-center text-white text-3xl font-black">
                 {user.avatar ? (
-                  <Image src={user.avatar} alt={user.name} width={96} height={96} className="object-cover" />
+                  <img 
+                    src={user.avatar} 
+                    alt={user.name} 
+                    className="w-full h-full object-cover rounded-full" 
+                  />
                 ) : (
                   user.name.charAt(0).toUpperCase()
                 )}
               </div>
-              {/* CENTANG BIRU */}
-              <div className="absolute bottom-0 right-0 bg-[#0a0a0e] rounded-full p-1">
-                <BadgeCheck size={24} className="text-blue-500 fill-blue-500/20" />
+              {/* Centang Biru */}
+              <div className="absolute bottom-0 right-0 bg-[#0a0a0e] rounded-full p-1 shadow-lg">
+                <BadgeCheck size={26} className="text-blue-500 fill-blue-500/20" />
               </div>
             </div>
           </div>
 
-          {/* Text Info */}
-          <div className="mt-14 text-center">
+          {/* Text Info (Diberi jarak mt-16 agar tidak tertutup avatar) */}
+          <div className="mt-16 text-center">
             <div className="flex items-center justify-center gap-1.5 mb-1">
               <h1 className="text-2xl font-black text-white">{user.name}</h1>
               <BadgeCheck size={20} className="text-blue-500" />
