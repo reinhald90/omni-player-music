@@ -10,6 +10,10 @@ import {
   updateProfile
 } from 'firebase/auth'
 import { auth, googleProvider } from '@/lib/firebase'
+// Import store lain untuk dibersihkan saat logout
+import { useFavoritesStore } from './favoritesStore'
+import { usePlaylistStore } from './playlistStore'
+import { useHistoryStore } from './historyStore'
 
 export interface User {
   id: string
@@ -52,6 +56,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const currentUser = get().user
     if (!currentUser) return
     try {
+      // 1. Daftarkan user ke Neon DB jika belum ada (agar muncul di Admin Dashboard)
+      await fetch('/api/db/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          uid: currentUser.id, 
+          name: currentUser.name, 
+          email: currentUser.email,
+          avatar_url: currentUser.avatar
+        })
+      })
+
+      // 2. Ambil status terbaru (role, is_verified, cover)
       const res = await fetch(`/api/db/profile?uid=${currentUser.id}`)
       const json = await res.json()
       if (json.success) {
@@ -73,7 +90,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     try {
       // 1. Update ke Neon DB
-      await fetch('/api/db/profile', {
+      const res = await fetch('/api/db/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -83,6 +100,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           cover_url: data.coverUrl
         })
       })
+      
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Gagal update database')
 
       // 2. Update ke Firebase Auth (Hanya Nama & Avatar)
       if (auth.currentUser) {
@@ -174,6 +194,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    // 1. Logout dari Firebase
     await signOut(auth)
+    
+    // 2. Hapus data lokal (Favorit, Playlist, History) agar tidak bocor ke user lain
+    useFavoritesStore.getState().clear()
+    usePlaylistStore.getState().clear()
+    useHistoryStore.getState().clear()
+    
+    // 3. Hapus state user
+    set({ user: null, isAuthenticated: false })
   }
 }))
