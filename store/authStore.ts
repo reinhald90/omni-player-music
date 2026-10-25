@@ -16,6 +16,7 @@ export interface User {
   name: string
   email: string
   avatar?: string
+  joinedAt?: number
 }
 
 interface AuthState {
@@ -43,7 +44,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   clearError: () => set({ error: null }),
 
   initAuth: () => {
-    // Firebase otomatis ingat session user
     onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
         set({
@@ -52,6 +52,7 @@ export const useAuthStore = create<AuthState>((set) => ({
             name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
             email: firebaseUser.email || '',
             avatar: firebaseUser.photoURL || undefined,
+            joinedAt: firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime).getTime() : Date.now(),
           },
           isAuthenticated: true,
           initialized: true,
@@ -78,14 +79,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ loading: true, error: null })
     try {
       const res = await createUserWithEmailAndPassword(auth, email, password)
-      // Simpan nama ke profil Firebase
       await updateProfile(res.user, { displayName: name })
-      // Trigger update state manual
       set({ 
         user: {
           id: res.user.uid,
           name: name,
           email: res.user.email || '',
+          joinedAt: Date.now(),
         }
       })
     } catch (err: any) {
