@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app'
 import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from 'firebase/auth'
+import { getStorage } from 'firebase/storage' // <-- TAMBAHAN
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -13,6 +14,7 @@ const firebaseConfig = {
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp()
 const auth = getAuth(app)
+const storage = getStorage(app) // <-- TAMBAHAN
 const googleProvider = new GoogleAuthProvider()
 
 // 🔥 PENTING: Paksa Firebase ingat login user di browser
@@ -20,4 +22,4 @@ setPersistence(auth, browserLocalPersistence).catch((err) => {
   console.error('Gagal set persistence Firebase:', err)
 })
 
-export { app, auth, googleProvider }
+export { app, auth, storage, googleProvider } // <-- TAMBAHKAN storage DI SINI
