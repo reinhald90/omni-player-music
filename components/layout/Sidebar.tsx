@@ -14,12 +14,14 @@ import {
   Radio,
   ExternalLink,
   MessageSquare,
+  UploadCloud,
 } from 'lucide-react'
 import { SITE_CONFIG } from '@/lib/constants'
 import { clsx } from 'clsx'
 
 const NAV_ITEMS = [
   { href: '/', icon: Home, label: 'Beranda', desc: 'Cari & putar lagu' },
+  { href: '/upload', icon: UploadCloud, label: 'Upload Musik', desc: 'Bagikan karyamu' },
   { href: '/chat', icon: MessageSquare, label: 'Chat Global', desc: 'Ngobrol bareng user' },
   { href: '/favorites', icon: Heart, label: 'Favorit', desc: 'Lagu kesukaanmu' },
   { href: '/playlists', icon: ListMusic, label: 'Playlist', desc: 'Koleksi pribadi' },
@@ -160,7 +162,7 @@ export default function Sidebar({ open, onClose }: Props) {
             <ExternalLink size={13} className="text-emerald-400 flex-none" />
           </a>
           <div className="text-center text-[9px] text-white/20 mt-3 tracking-[0.3em] uppercase font-bold">
-            v1.0 · Made with ♥
+            v2.0 · Made with ♥
           </div>
         </div>
       </aside>
