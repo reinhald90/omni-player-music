@@ -30,7 +30,7 @@ export default function UploadPage() {
   const handleAudioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 15 * 1024 * 1024) { // Naikkan limit ke 15MB
+    if (file.size > 15 * 1024 * 1024) { 
       alert('File musik terlalu besar! Maksimal 15MB.')
       e.target.value = ''
       return
@@ -61,17 +61,26 @@ export default function UploadPage() {
       let audioUrl = ''
       let coverUrl = null
 
+      // === 🛡️ GENERATE NAMA FILE OFFICIAL (Anti Error) ===
+      // Ambil ekstensi asli file (mp3, wav, dll)
+      const audioExt = audioFile.name.split('.').pop()?.toLowerCase() || 'mp3'
+      const coverExt = coverFile ? (coverFile.name.split('.').pop()?.toLowerCase() || 'jpg') : ''
+
+      // Buat nama random yang aman: opm_audio_timestamp_random.mp3
+      const randomStr = Math.random().toString(36).substring(2, 8)
+      const safeAudioName = `opm_audio_${Date.now()}_${randomStr}.${audioExt}`
+      const safeCoverName = coverFile ? `opm_cover_${Date.now()}_${randomStr}.${coverExt}` : ''
+
       // === PROSES PARALEL (UPLOAD BERSAMAAN) ===
       const uploadPromises = []
 
       // 1. Persiapan Upload Audio
-      const audioRef = ref(storage, `community/audio/${Date.now()}_${audioFile.name}`)
+      const audioRef = ref(storage, `community/audio/${safeAudioName}`)
       const audioUploadTask = uploadBytesResumable(audioRef, audioFile)
       
       const audioPromise = new Promise<string>((resolve, reject) => {
         audioUploadTask.on('state_changed', 
           (snapshot) => {
-            // Update progress (50% jatah untuk audio)
             const p = (snapshot.bytesTransferred / snapshot.totalBytes) * 50
             setProgress(prev => Math.max(prev, Math.round(p)))
           },
@@ -86,13 +95,12 @@ export default function UploadPage() {
 
       // 2. Persiapan Upload Cover (Jika Ada)
       if (coverFile) {
-        const coverRef = ref(storage, `community/covers/${Date.now()}_${coverFile.name}`)
+        const coverRef = ref(storage, `community/covers/${safeCoverName}`)
         const coverUploadTask = uploadBytesResumable(coverRef, coverFile)
         
         const coverPromise = new Promise<string>((resolve, reject) => {
           coverUploadTask.on('state_changed',
             (snapshot) => {
-              // Update progress (50% jatah untuk cover)
               const p = 50 + (snapshot.bytesTransferred / snapshot.totalBytes) * 50
               setProgress(prev => Math.max(prev, Math.round(p)))
             },
@@ -106,13 +114,13 @@ export default function UploadPage() {
         uploadPromises.push(coverPromise)
       }
 
-      // Jalankan kedua upload bersamaan
+      // Tunggu kedua upload selesai
       const results = await Promise.all(uploadPromises)
       audioUrl = results[0]
       if (coverFile && results[1]) coverUrl = results[1]
 
       setProgress(100)
-      console.log('✅ File selesai di-upload ke Firebase. Menyimpan ke Database...')
+      console.log('✅ File tersimpan di Firebase. Menyimpan ke Database...')
 
       // 3. Simpan ke Database Neon
       const res = await fetch('/api/db/community-songs', {
