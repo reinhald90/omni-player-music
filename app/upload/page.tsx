@@ -27,24 +27,20 @@ export default function UploadPage() {
     if (initialized && !isAuthenticated) router.push('/')
   }, [initialized, isAuthenticated, router])
 
-  // Batasi ukuran file musik maksimal 10MB
   const handleAudioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-
-    if (file.size > 10 * 1024 * 1024) {
-      alert('File musik terlalu besar! Maksimal 10MB.')
+    if (file.size > 15 * 1024 * 1024) { // Naikkan limit ke 15MB
+      alert('File musik terlalu besar! Maksimal 15MB.')
       e.target.value = ''
       return
     }
     setAudioFile(file)
   }
 
-  // Batasi ukuran gambar cover maksimal 2MB
   const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-
     if (file.size > 2 * 1024 * 1024) {
       alert('Gambar cover terlalu besar! Maksimal 2MB.')
       e.target.value = ''
@@ -59,50 +55,64 @@ export default function UploadPage() {
 
     setUploading(true)
     setProgress(0)
+    console.log('⏳ Memulai proses upload...')
 
     try {
-      // 1. Upload File Audio ke Firebase Storage
+      let audioUrl = ''
+      let coverUrl = null
+
+      // === PROSES PARALEL (UPLOAD BERSAMAAN) ===
+      const uploadPromises = []
+
+      // 1. Persiapan Upload Audio
       const audioRef = ref(storage, `community/audio/${Date.now()}_${audioFile.name}`)
-      const audioUpload = uploadBytesResumable(audioRef, audioFile)
+      const audioUploadTask = uploadBytesResumable(audioRef, audioFile)
       
-      const audioUrl = await new Promise<string>((resolve, reject) => {
-        let lastProgress = 0
-        audioUpload.on('state_changed', 
+      const audioPromise = new Promise<string>((resolve, reject) => {
+        audioUploadTask.on('state_changed', 
           (snapshot) => {
-            // 🔥 HANYA UPDATE UI KALAU NAIK 2% (Biar gak ngelag)
-            const currentProgress = (snapshot.bytesTransferred / snapshot.totalBytes) * 50
-            if (currentProgress - lastProgress >= 1) {
-              setProgress(Math.round(currentProgress))
-              lastProgress = currentProgress
-            }
+            // Update progress (50% jatah untuk audio)
+            const p = (snapshot.bytesTransferred / snapshot.totalBytes) * 50
+            setProgress(prev => Math.max(prev, Math.round(p)))
           },
           reject,
-          async () => resolve(await getDownloadURL(audioUpload.snapshot.ref))
+          async () => {
+            console.log('✅ Audio selesai di-upload ke Storage')
+            resolve(await getDownloadURL(audioUploadTask.snapshot.ref))
+          }
         )
       })
+      uploadPromises.push(audioPromise)
 
-      // 2. Upload Cover (jika ada)
-      let coverUrl = null
+      // 2. Persiapan Upload Cover (Jika Ada)
       if (coverFile) {
         const coverRef = ref(storage, `community/covers/${Date.now()}_${coverFile.name}`)
-        const coverUpload = uploadBytesResumable(coverRef, coverFile)
-        coverUrl = await new Promise<string>((resolve, reject) => {
-          let lastProgress = 50
-          coverUpload.on('state_changed',
+        const coverUploadTask = uploadBytesResumable(coverRef, coverFile)
+        
+        const coverPromise = new Promise<string>((resolve, reject) => {
+          coverUploadTask.on('state_changed',
             (snapshot) => {
-              const currentProgress = 50 + (snapshot.bytesTransferred / snapshot.totalBytes) * 50
-              if (currentProgress - lastProgress >= 1) {
-                setProgress(Math.round(currentProgress))
-                lastProgress = currentProgress
-              }
+              // Update progress (50% jatah untuk cover)
+              const p = 50 + (snapshot.bytesTransferred / snapshot.totalBytes) * 50
+              setProgress(prev => Math.max(prev, Math.round(p)))
             },
             reject,
-            async () => resolve(await getDownloadURL(coverUpload.snapshot.ref))
+            async () => {
+              console.log('✅ Cover selesai di-upload ke Storage')
+              resolve(await getDownloadURL(coverUploadTask.snapshot.ref))
+            }
           )
         })
+        uploadPromises.push(coverPromise)
       }
 
+      // Jalankan kedua upload bersamaan
+      const results = await Promise.all(uploadPromises)
+      audioUrl = results[0]
+      if (coverFile && results[1]) coverUrl = results[1]
+
       setProgress(100)
+      console.log('✅ File selesai di-upload ke Firebase. Menyimpan ke Database...')
 
       // 3. Simpan ke Database Neon
       const res = await fetch('/api/db/community-songs', {
@@ -119,13 +129,14 @@ export default function UploadPage() {
       })
 
       if (!res.ok) throw new Error('Gagal simpan ke database')
+      console.log('✅ Berhasil disimpan ke Database!')
 
       alert('Lagu berhasil diunggah! 🎉')
-      router.push('/explore') // Langsung arahkan ke halaman eksplorasi
+      router.push('/explore') 
 
     } catch (err: any) {
-      console.error(err)
-      alert('Gagal upload: ' + err.message)
+      console.error('❌ Gagal upload:', err)
+      alert('Gagal upload: ' + (err.message || 'Terjadi kesalahan'))
     } finally {
       setUploading(false)
     }
@@ -164,7 +175,7 @@ export default function UploadPage() {
           <label className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-2 block">File Musik (MP3) *</label>
           <div onClick={() => !uploading && audioInputRef.current?.click()} className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center transition-colors bg-black/20 ${uploading ? 'border-white/5 opacity-50' : 'border-white/10 hover:border-brand/50 cursor-pointer'}`}>
             <Music size={24} className={audioFile ? 'text-brand' : 'text-white/30'} />
-            <span className="text-xs font-bold mt-2 text-white/60 truncate max-w-full px-2">{audioFile ? audioFile.name : 'Pilih File MP3 (Max 10MB)'}</span>
+            <span className="text-xs font-bold mt-2 text-white/60 truncate max-w-full px-2">{audioFile ? audioFile.name : 'Pilih File MP3 (Max 15MB)'}</span>
           </div>
           <input type="file" accept="audio/*" ref={audioInputRef} onChange={handleAudioChange} className="hidden" disabled={uploading} />
         </div>
@@ -181,7 +192,7 @@ export default function UploadPage() {
         {uploading && (
           <div className="space-y-2">
             <div className="flex justify-between text-[10px] font-bold text-brand">
-              <span>Mengunggah...</span>
+              <span>Mengunggah... (Jangan tutup halaman ini)</span>
               <span>{progress}%</span>
             </div>
             <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
