@@ -11,7 +11,6 @@ const CORS_PROXY = 'https://api.allorigins.win/raw?url='
 
 async function fetchFromIkyyxd(query: string): Promise<any> {
   const apiUrl = `${PRIMARY_API}?q=${encodeURIComponent(query)}`
-
   try {
     const res = await fetch(apiUrl, { headers: { Accept: 'application/json' } })
     if (res.ok) {
@@ -21,7 +20,6 @@ async function fetchFromIkyyxd(query: string): Promise<any> {
   } catch (e: any) {
     console.warn('[Audio] API direct blocked:', e.message)
   }
-
   const proxyUrl = `${CORS_PROXY}${encodeURIComponent(apiUrl)}`
   const res2 = await fetch(proxyUrl)
   if (!res2.ok) throw new Error(`API proxy error ${res2.status}`)
@@ -173,7 +171,7 @@ export function useAudio() {
     }
   }, [fxEnabled, fxGains, fxBass, fxPreamp])
 
-  // === LOAD SONG (PINTAR BEDAIN LOKAL VS YOUTUBE) ===
+  // === LOAD SONG ===
   useEffect(() => {
     const audio = audioRef.current
     if (!audio || !current) return
@@ -190,16 +188,17 @@ export function useAudio() {
       try {
         let finalSrc = ''
 
-        // 🔥 CEK APAKAH INI LAGU KOMUNITAS (Lokal VPS)
         if (query.startsWith('/uploads/') || query.includes('omniplayermusic.web.id/uploads/')) {
-          console.log(`[Audio] 🎵 Memutar lagu lokal VPS: ${query}`)
           finalSrc = query
-        } 
-        // 🔥 JIKA BUKAN, BERARTI DARI YOUTUBE
-        else {
-          console.log(`[Audio] 🌐 Mengambil dari YouTube: ${query}`)
-          const json = await fetchFromIkyyxd(query)
-          const upstreamUrl: string = json.result.audio.url
+        } else {
+          // 🔥 TAMBAHKAN HEADER x-opm-client: web DI SINI JUGA
+          const res = await fetch(`/api/stream?q=${encodeURIComponent(query)}`, {
+            headers: { 'x-opm-client': 'web' }
+          })
+          const json = await res.json()
+          if (!json.success) throw new Error(json.error || 'Gagal ambil audio')
+          
+          const upstreamUrl: string = json.data.audioUrl
           finalSrc = `/api/audio?url=${encodeURIComponent(upstreamUrl)}`
         }
 

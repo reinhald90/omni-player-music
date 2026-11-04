@@ -8,17 +8,18 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
     const file = formData.get('file') as File
-    const type = formData.get('type') as string
+    const type = formData.get('type') as string // 'audio', 'cover', 'avatar'
 
     if (!file) return NextResponse.json({ error: 'File tidak ditemukan' }, { status: 400 })
 
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'mp3'
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'mp4'
     const filename = `opm_${type}_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads')
     
+    // Simpan ke folder public/uploads
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads')
     await mkdir(uploadDir, { recursive: true })
     
     const filePath = path.join(uploadDir, filename)

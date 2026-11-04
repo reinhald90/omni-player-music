@@ -21,6 +21,7 @@
     "next": "14.2.15",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-easy-crop": "^6.2.4",
     "yt-search": "^2.12.1",
     "zustand": "^5.0.0"
   },
@@ -33,6 +34,7 @@
     "eslint-config-next": "14.2.15",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
+    "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.6.3"
   },
   "engines": {

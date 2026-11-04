@@ -17,7 +17,12 @@ export default function HomePage() {
     setError(null)
     setSearched(true)
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
+      // 🔥 TAMBAHKAN HEADER x-opm-client: web
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
+        headers: {
+          'x-opm-client': 'web'
+        }
+      })
       const json = await res.json()
       if (!json.success) throw new Error(json.error || 'Gagal mencari')
       setResults(json.data || [])
@@ -31,7 +36,6 @@ export default function HomePage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      {/* Hero */}
       <div className="text-center mb-8">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass mb-4">
           <Sparkles size={12} className="text-brand" />
@@ -47,15 +51,12 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* Search */}
       <div className="mb-8">
         <SearchBar onSearch={handleSearch} loading={loading} />
       </div>
 
-      {/* Results */}
       <ResultList results={results} loading={loading} error={error} />
 
-      {/* Empty state awal */}
       {!searched && !loading && (
         <div className="text-center text-white/30 text-xs mt-16">
           <p>Mulai dengan mencari lagu di atas ✨</p>
