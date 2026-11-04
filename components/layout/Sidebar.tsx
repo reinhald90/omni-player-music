@@ -4,13 +4,26 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  X, Home, Heart, ListMusic, History, BarChart3, Info, Radio, ExternalLink, MessageSquare, UploadCloud, Compass,
+  X,
+  Home,
+  Heart,
+  ListMusic,
+  History,
+  BarChart3,
+  Info,
+  Radio,
+  ExternalLink,
+  MessageSquare,
+  UploadCloud,
+  Compass,
+  Clapperboard,
 } from 'lucide-react'
 import { SITE_CONFIG } from '@/lib/constants'
 import { clsx } from 'clsx'
 
 const NAV_ITEMS = [
   { href: '/', icon: Home, label: 'Beranda', desc: 'Cari & putar lagu' },
+  { href: '/reels', icon: Clapperboard, label: 'Reels', desc: 'Scroll lagu ala TikTok' },
   { href: '/explore', icon: Compass, label: 'Eksplorasi', desc: 'Lagu dari komunitas' },
   { href: '/upload', icon: UploadCloud, label: 'Upload Musik', desc: 'Bagikan karyamu' },
   { href: '/chat', icon: MessageSquare, label: 'Chat Global', desc: 'Ngobrol bareng user' },
@@ -104,7 +117,7 @@ export default function Sidebar({ open, onClose }: Props) {
             <ExternalLink size={13} className="text-emerald-400 flex-none" />
           </a>
           <div className="text-center text-[9px] text-white/20 mt-3 tracking-[0.3em] uppercase font-bold">
-            v2.0 · Made with ♥
+            v1.0 · Made with ♥
           </div>
         </div>
       </aside>

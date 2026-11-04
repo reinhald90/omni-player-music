@@ -11,11 +11,12 @@ interface PlayerState {
   duration: number
   lyrics: LyricLine[]
   lyricsDuration: number
-  lyricsOffset: number   // ← TAMBAH INI (detik, bisa negatif)
+  lyricsOffset: number
   loop: boolean
   fullMode: boolean
   sleepEnd: number | null
   sleepMin: number
+  hideMiniPlayer: boolean
 
   setCurrent: (song: Song) => void
   setQueue: (songs: Song[]) => void
@@ -34,12 +35,13 @@ interface PlayerState {
   setDuration: (d: number) => void
   setLyrics: (l: LyricLine[]) => void
   setLyricsDuration: (d: number) => void
-  setLyricsOffset: (o: number) => void   // ← TAMBAH INI
+  setLyricsOffset: (o: number) => void
   toggleLoop: () => void
   openFull: () => void
   closeFull: () => void
   startSleep: (min: number) => void
   cancelSleep: () => void
+  setHideMiniPlayer: (v: boolean) => void
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -52,48 +54,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   duration: 0,
   lyrics: [],
   lyricsDuration: 0,
-  lyricsOffset: 0,   // ← TAMBAH INI
+  lyricsOffset: 0,
   loop: false,
   fullMode: false,
   sleepEnd: null,
   sleepMin: 0,
+  hideMiniPlayer: false,
 
-  setCurrent: (song) =>
-    set({
-      current: song,
-      currentTime: 0,
-      duration: 0,
-      lyrics: [],
-      lyricsDuration: 0,
-      // Jangan reset lyricsOffset biar user gak perlu atur ulang tiap lagu
-      isPlaying: true,
-    }),
+  setCurrent: (song) => set({ current: song, currentTime: 0, duration: 0, lyrics: [], lyricsDuration: 0, isPlaying: true }),
   setQueue: (songs) => set({ queue: songs }),
-  addToQueue: (song) => {
-    const q = get().queue
-    if (q.some((s) => s.id === song.id)) return
-    set({ queue: [...q, song] })
-  },
-  playNext: (song) => {
-    const q = get().queue.filter((s) => s.id !== song.id)
-    set({ queue: [song, ...q] })
-  },
+  addToQueue: (song) => { const q = get().queue; if (q.some((s) => s.id === song.id)) return; set({ queue: [...q, song] }) },
+  playNext: (song) => { const q = get().queue.filter((s) => s.id !== song.id); set({ queue: [song, ...q] }) },
   removeFromQueue: (idx) => set({ queue: get().queue.filter((_, i) => i !== idx) }),
   clearQueue: () => set({ queue: [] }),
-  next: () => {
-    const { queue, current } = get()
-    if (!queue.length) return
-    const idx = current ? queue.findIndex((s) => s.id === current.id) : -1
-    const nextSong = queue[idx + 1] || queue[0]
-    if (nextSong) get().setCurrent(nextSong)
-  },
-  prev: () => {
-    const { queue, current } = get()
-    if (!queue.length) return
-    const idx = current ? queue.findIndex((s) => s.id === current.id) : 0
-    const prevSong = queue[idx - 1] || queue[queue.length - 1]
-    if (prevSong) get().setCurrent(prevSong)
-  },
+  next: () => { const { queue, current } = get(); if (!queue.length) return; const idx = current ? queue.findIndex((s) => s.id === current.id) : -1; const nextSong = queue[idx + 1] || queue[0]; if (nextSong) get().setCurrent(nextSong) },
+  prev: () => { const { queue, current } = get(); if (!queue.length) return; const idx = current ? queue.findIndex((s) => s.id === current.id) : 0; const prevSong = queue[idx - 1] || queue[queue.length - 1]; if (prevSong) get().setCurrent(prevSong) },
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
   toggle: () => set((s) => ({ isPlaying: !s.isPlaying })),
@@ -103,13 +78,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setDuration: (d) => set({ duration: d }),
   setLyrics: (l) => set({ lyrics: l }),
   setLyricsDuration: (d) => set({ lyricsDuration: d }),
-  setLyricsOffset: (o) => set({ lyricsOffset: o }),   // ← TAMBAH INI
+  setLyricsOffset: (o) => set({ lyricsOffset: o }),
   toggleLoop: () => set((s) => ({ loop: !s.loop })),
   openFull: () => set({ fullMode: true }),
   closeFull: () => set({ fullMode: false }),
-  startSleep: (min) => {
-    const end = Date.now() + min * 60 * 1000
-    set({ sleepEnd: end, sleepMin: min })
-  },
+  startSleep: (min) => { const end = Date.now() + min * 60 * 1000; set({ sleepEnd: end, sleepMin: min }) },
   cancelSleep: () => set({ sleepEnd: null, sleepMin: 0 }),
+  setHideMiniPlayer: (v) => set({ hideMiniPlayer: v }),
 }))

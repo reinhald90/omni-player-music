@@ -3,8 +3,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
-import { storage } from '@/lib/firebase'
 import { UploadCloud, Music, ImageIcon, Loader2, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
@@ -30,8 +28,8 @@ export default function UploadPage() {
   const handleAudioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 15 * 1024 * 1024) { 
-      alert('File musik terlalu besar! Maksimal 15MB.')
+    if (file.size > 30 * 1024 * 1024) { 
+      alert('File musik terlalu besar! Maksimal 30MB.')
       e.target.value = ''
       return
     }
@@ -41,8 +39,8 @@ export default function UploadPage() {
   const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Gambar cover terlalu besar! Maksimal 2MB.')
+    if (file.size > 3 * 1024 * 1024) {
+      alert('Gambar cover terlalu besar! Maksimal 3MB.')
       e.target.value = ''
       return
     }
@@ -54,75 +52,38 @@ export default function UploadPage() {
     if (!user || !audioFile || !title) return alert('Judul dan file musik wajib diisi!')
 
     setUploading(true)
-    setProgress(0)
-    console.log('⏳ Memulai proses upload...')
+    setProgress(10)
 
     try {
       let audioUrl = ''
       let coverUrl = null
 
-      // === 🛡️ GENERATE NAMA FILE OFFICIAL (Anti Error) ===
-      // Ambil ekstensi asli file (mp3, wav, dll)
-      const audioExt = audioFile.name.split('.').pop()?.toLowerCase() || 'mp3'
-      const coverExt = coverFile ? (coverFile.name.split('.').pop()?.toLowerCase() || 'jpg') : ''
-
-      // Buat nama random yang aman: opm_audio_timestamp_random.mp3
-      const randomStr = Math.random().toString(36).substring(2, 8)
-      const safeAudioName = `opm_audio_${Date.now()}_${randomStr}.${audioExt}`
-      const safeCoverName = coverFile ? `opm_cover_${Date.now()}_${randomStr}.${coverExt}` : ''
-
-      // === PROSES PARALEL (UPLOAD BERSAMAAN) ===
-      const uploadPromises = []
-
-      // 1. Persiapan Upload Audio
-      const audioRef = ref(storage, `community/audio/${safeAudioName}`)
-      const audioUploadTask = uploadBytesResumable(audioRef, audioFile)
+      const audioData = new FormData()
+      audioData.append('file', audioFile)
+      audioData.append('type', 'audio')
       
-      const audioPromise = new Promise<string>((resolve, reject) => {
-        audioUploadTask.on('state_changed', 
-          (snapshot) => {
-            const p = (snapshot.bytesTransferred / snapshot.totalBytes) * 50
-            setProgress(prev => Math.max(prev, Math.round(p)))
-          },
-          reject,
-          async () => {
-            console.log('✅ Audio selesai di-upload ke Storage')
-            resolve(await getDownloadURL(audioUploadTask.snapshot.ref))
-          }
-        )
-      })
-      uploadPromises.push(audioPromise)
+      const audioRes = await fetch('/api/upload', { method: 'POST', body: audioData })
+      const audioJson = await audioRes.json()
+      
+      if (!audioJson.success) throw new Error(audioJson.error)
+      audioUrl = audioJson.url
+      
+      setProgress(50)
 
-      // 2. Persiapan Upload Cover (Jika Ada)
       if (coverFile) {
-        const coverRef = ref(storage, `community/covers/${safeCoverName}`)
-        const coverUploadTask = uploadBytesResumable(coverRef, coverFile)
+        const coverData = new FormData()
+        coverData.append('file', coverFile)
+        coverData.append('type', 'cover')
         
-        const coverPromise = new Promise<string>((resolve, reject) => {
-          coverUploadTask.on('state_changed',
-            (snapshot) => {
-              const p = 50 + (snapshot.bytesTransferred / snapshot.totalBytes) * 50
-              setProgress(prev => Math.max(prev, Math.round(p)))
-            },
-            reject,
-            async () => {
-              console.log('✅ Cover selesai di-upload ke Storage')
-              resolve(await getDownloadURL(coverUploadTask.snapshot.ref))
-            }
-          )
-        })
-        uploadPromises.push(coverPromise)
+        const coverRes = await fetch('/api/upload', { method: 'POST', body: coverData })
+        const coverJson = await coverRes.json()
+        
+        if (!coverJson.success) throw new Error(coverJson.error)
+        coverUrl = coverJson.url
       }
 
-      // Tunggu kedua upload selesai
-      const results = await Promise.all(uploadPromises)
-      audioUrl = results[0]
-      if (coverFile && results[1]) coverUrl = results[1]
+      setProgress(80)
 
-      setProgress(100)
-      console.log('✅ File tersimpan di Firebase. Menyimpan ke Database...')
-
-      // 3. Simpan ke Database Neon
       const res = await fetch('/api/db/community-songs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -137,9 +98,9 @@ export default function UploadPage() {
       })
 
       if (!res.ok) throw new Error('Gagal simpan ke database')
-      console.log('✅ Berhasil disimpan ke Database!')
-
-      alert('Lagu berhasil diunggah! 🎉')
+      
+      setProgress(100)
+      alert('Lagu berhasil diunggah ke VPS! 🎉')
       router.push('/explore') 
 
     } catch (err: any) {
@@ -183,7 +144,7 @@ export default function UploadPage() {
           <label className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-2 block">File Musik (MP3) *</label>
           <div onClick={() => !uploading && audioInputRef.current?.click()} className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center transition-colors bg-black/20 ${uploading ? 'border-white/5 opacity-50' : 'border-white/10 hover:border-brand/50 cursor-pointer'}`}>
             <Music size={24} className={audioFile ? 'text-brand' : 'text-white/30'} />
-            <span className="text-xs font-bold mt-2 text-white/60 truncate max-w-full px-2">{audioFile ? audioFile.name : 'Pilih File MP3 (Max 15MB)'}</span>
+            <span className="text-xs font-bold mt-2 text-white/60 truncate max-w-full px-2">{audioFile ? audioFile.name : 'Pilih File MP3 (Max 30MB)'}</span>
           </div>
           <input type="file" accept="audio/*" ref={audioInputRef} onChange={handleAudioChange} className="hidden" disabled={uploading} />
         </div>
@@ -192,7 +153,7 @@ export default function UploadPage() {
           <label className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-2 block">Cover Lagu (Gambar)</label>
           <div onClick={() => !uploading && coverInputRef.current?.click()} className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center transition-colors bg-black/20 ${uploading ? 'border-white/5 opacity-50' : 'border-white/10 hover:border-brand/50 cursor-pointer'}`}>
             <ImageIcon size={24} className={coverFile ? 'text-brand' : 'text-white/30'} />
-            <span className="text-xs font-bold mt-2 text-white/60 truncate max-w-full px-2">{coverFile ? coverFile.name : 'Pilih Gambar (Max 2MB)'}</span>
+            <span className="text-xs font-bold mt-2 text-white/60 truncate max-w-full px-2">{coverFile ? coverFile.name : 'Pilih Gambar (Max 3MB)'}</span>
           </div>
           <input type="file" accept="image/*" ref={coverInputRef} onChange={handleCoverChange} className="hidden" disabled={uploading} />
         </div>
@@ -200,7 +161,7 @@ export default function UploadPage() {
         {uploading && (
           <div className="space-y-2">
             <div className="flex justify-between text-[10px] font-bold text-brand">
-              <span>Mengunggah... (Jangan tutup halaman ini)</span>
+              <span>Mengunggah ke VPS... (Jangan ditutup)</span>
               <span>{progress}%</span>
             </div>
             <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">

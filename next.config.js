@@ -1,16 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {
-    serverComponentsExternalPackages: ['yt-search', 'cheerio'],
-  },
   images: {
+    unoptimized: true,
     remotePatterns: [
       { protocol: 'https', hostname: 'i.ytimg.com' },
       { protocol: 'https', hostname: 'img.youtube.com' },
       { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
       { protocol: 'https', hostname: 'yt3.ggpht.com' },
     ],
+  },
+  // 🔥 INI DIA YANG KETINGGALAN TADI
+  experimental: {
+    serverComponentsExternalPackages: ['yt-search', 'cheerio'],
   },
   async headers() {
     return [
@@ -19,7 +21,6 @@ const nextConfig = {
         headers: [
           { key: 'Access-Control-Allow-Origin', value: '*' },
           { key: 'Access-Control-Allow-Methods', value: 'GET,POST,OPTIONS' },
-          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Range' },
         ],
       },
     ]

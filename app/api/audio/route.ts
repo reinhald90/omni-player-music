@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
@@ -35,10 +35,6 @@ export async function GET(req: NextRequest) {
     headers.set('Access-Control-Allow-Origin', '*')
     headers.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
     headers.set('Access-Control-Allow-Headers', 'Range')
-    headers.set(
-      'Access-Control-Expose-Headers',
-      'Content-Length, Content-Range, Accept-Ranges, Content-Disposition'
-    )
     headers.set('Accept-Ranges', 'bytes')
     headers.set('Cache-Control', 'public, max-age=3600')
 

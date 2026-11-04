@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useAuthStore } from '@/store/authStore'
 import { Send, BadgeCheck, MessageSquare, Loader2 } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -29,14 +30,12 @@ export default function GlobalChatPage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const [isScrolledToBottom, setIsScrolledToBottom] = useState(true)
 
-  // Redirect jika belum login
   useEffect(() => {
     if (initialized && !isAuthenticated) {
       router.push('/')
     }
   }, [initialized, isAuthenticated, router])
 
-  // Fungsi ambil pesan
   const fetchMessages = async (isFirstLoad = false) => {
     try {
       const res = await fetch('/api/db/chat')
@@ -49,7 +48,6 @@ export default function GlobalChatPage() {
     finally { if (isFirstLoad) setLoading(false) }
   }
 
-  // Polling: Ambil pesan setiap 3 detik
   useEffect(() => {
     if (!isAuthenticated) return
     fetchMessages(true)
@@ -57,7 +55,6 @@ export default function GlobalChatPage() {
     return () => clearInterval(interval)
   }, [isAuthenticated])
 
-  // Auto-scroll ke bawah jika user sedang di paling bawah
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     if (bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior })
@@ -67,12 +64,10 @@ export default function GlobalChatPage() {
   const handleScroll = () => {
     if (!containerRef.current) return
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current
-    // Cek apakah user scroll-nya mendekati bawah (toleransi 50px)
     const isBottom = scrollHeight - scrollTop - clientHeight < 50
     setIsScrolledToBottom(isBottom)
   }
 
-  // Auto-scroll saat pesan baru masuk
   useEffect(() => {
     if (isScrolledToBottom) {
       scrollToBottom()
@@ -87,7 +82,6 @@ export default function GlobalChatPage() {
     const msgToSend = input.trim()
     setInput('')
 
-    // Optimistic UI: Langsung tampilkan pesan kita (tanpa nunggu server)
     const tempMsg: ChatMessage = {
       id: Date.now().toString(),
       user_id: user.id,
@@ -112,7 +106,7 @@ export default function GlobalChatPage() {
           message: msgToSend 
         })
       })
-      fetchMessages(false) // Refresh dari server
+      fetchMessages(false)
     } catch (e) {
       alert('Gagal kirim pesan')
     } finally {
@@ -156,20 +150,29 @@ export default function GlobalChatPage() {
             return (
               <div key={msg.id} className={clsx("flex gap-2.5", isMe ? "flex-row-reverse" : "flex-row")}>
                 
-                {/* Avatar */}
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-white text-[10px] font-black flex-none overflow-hidden">
+                {/* 🔥 AVATAR (Bisa Diklik ke Profil) 🔥 */}
+                <Link 
+                  href={`/user/${msg.user_id}`}
+                  className="w-8 h-8 rounded-full bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-white text-[10px] font-black flex-none overflow-hidden hover:ring-2 hover:ring-brand/50 transition-all cursor-pointer z-10"
+                >
                   {msg.user_avatar ? (
                     <img src={msg.user_avatar} alt={msg.user_name} className="w-full h-full object-cover" />
                   ) : (
                     msg.user_name.charAt(0).toUpperCase()
                   )}
-                </div>
+                </Link>
 
                 {/* Bubble Chat */}
                 <div className={clsx("max-w-[75%] flex flex-col", isMe ? "items-end" : "items-start")}>
                   {/* Nama & Centang Biru */}
                   <div className="flex items-center gap-1 mb-1 px-1">
-                    <span className="text-[10px] text-white/40 font-bold">{isMe ? 'Kamu' : msg.user_name}</span>
+                    {/* 🔥 NAMA (Bisa Diklik ke Profil) 🔥 */}
+                    <Link 
+                      href={`/user/${msg.user_id}`}
+                      className="text-[10px] text-white/40 font-bold hover:text-brand hover:underline transition-all"
+                    >
+                      {isMe ? 'Kamu' : msg.user_name}
+                    </Link>
                     {msg.is_verified && <BadgeCheck size={10} className="text-blue-500" />}
                   </div>
                   
