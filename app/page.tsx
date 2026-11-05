@@ -17,11 +17,8 @@ export default function HomePage() {
     setError(null)
     setSearched(true)
     try {
-      // 🔥 TAMBAHKAN HEADER x-opm-client: web
       const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
-        headers: {
-          'x-opm-client': 'web'
-        }
+        headers: { 'x-opm-client': 'web' }
       })
       const json = await res.json()
       if (!json.success) throw new Error(json.error || 'Gagal mencari')
@@ -36,18 +33,18 @@ export default function HomePage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass mb-4">
-          <Sparkles size={12} className="text-brand" />
+      <div className="text-center mb-10">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 mb-5">
+          <Sparkles size={12} className="text-white/70" />
           <span className="text-[10px] font-black tracking-[0.2em] uppercase text-white/70">
             Premium Music Player
           </span>
         </div>
-        <h1 className="text-3xl sm:text-4xl font-black gradient-text mb-2">
+        <h1 className="text-3xl sm:text-4xl font-black text-white mb-3">
           Omni Player Music
         </h1>
-        <p className="text-sm text-white/50">
-          Streaming, lirik, dan riwayat — semua di satu tempat 🎧
+        <p className="text-sm text-white/50 max-w-md mx-auto">
+          Streaming, lirik, dan riwayat — semua di satu tempat.
         </p>
       </div>
 

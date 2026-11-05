@@ -7,15 +7,14 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const uid = req.nextUrl.searchParams.get('uid')
   try {
-    // Update last_seen user yang lagi buka chat
     if (uid) {
       await sql`UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE firebase_uid = ${uid}`
     }
 
-    // Ambil chat beserta role dan warna user
     const messages = await sql`
       SELECT 
         c.id, c.user_id, c.user_name, c.user_avatar, c.is_verified, c.message, c.created_at,
+        c.reply_to_id, c.reply_to_name, c.reply_to_message, c.media_url, c.media_type,
         u.role, u.role_color
       FROM chat_messages c
       LEFT JOIN users u ON c.user_id = u.firebase_uid
@@ -30,12 +29,25 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { uid, name, avatar, isVerified, message } = await req.json()
-    if (!uid || !message || message.trim() === '') return NextResponse.json({ error: 'Data tidak valid' }, { status: 400 })
+    const { 
+      uid, name, avatar, isVerified, message, 
+      replyToId, replyToName, replyToMessage, 
+      mediaUrl, mediaType 
+    } = await req.json()
+
+    if (!uid || (!message && !mediaUrl)) return NextResponse.json({ error: 'Data tidak valid' }, { status: 400 })
 
     await sql`
-      INSERT INTO chat_messages (user_id, user_name, user_avatar, is_verified, message)
-      VALUES (${uid}, ${name}, ${avatar || null}, ${isVerified || false}, ${message.trim()})
+      INSERT INTO chat_messages (
+        user_id, user_name, user_avatar, is_verified, message,
+        reply_to_id, reply_to_name, reply_to_message,
+        media_url, media_type
+      )
+      VALUES (
+        ${uid}, ${name}, ${avatar || null}, ${isVerified || false}, ${message || ''},
+        ${replyToId || null}, ${replyToName || null}, ${replyToMessage || null},
+        ${mediaUrl || null}, ${mediaType || null}
+      )
     `
     return NextResponse.json({ success: true })
   } catch (error: any) {

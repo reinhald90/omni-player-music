@@ -1,0 +1,22 @@
+[
+  {
+    "id": "default",
+    "name": "Default",
+    "css": "border-2 border-[#1a1a1a]"
+  },
+  {
+    "id": "gold_owner",
+    "name": "Royal Gold (Owner)",
+    "css": "bg-[conic-gradient(from_0deg,transparent_0%,#f59e0b_20%,#fbbf24_50%,transparent_80%)] animate-[spin_3s_linear_infinite]"
+  },
+  {
+    "id": "neon_cyber",
+    "name": "Cyberpunk Neon",
+    "css": "bg-[conic-gradient(from_0deg,transparent_0%,#00ffff_20%,#ff00ff_50%,transparent_80%)] animate-[spin_2s_linear_infinite]"
+  },
+  {
+    "id": "emerald_glow",
+    "name": "Emerald Forest",
+    "css": "bg-[conic-gradient(from_0deg,transparent_0%,#10b981_20%,#34d399_50%,transparent_80%)] animate-[spin_4s_linear_infinite]"
+  }
+]
