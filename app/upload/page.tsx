@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
-import { auth } from '@/lib/firebase' // ⬅️ TAMBAHAN: Import Firebase Auth
+import { auth } from '@/lib/firebase'
 import { UploadCloud, Music, ImageIcon, Loader2, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
@@ -56,9 +56,13 @@ export default function UploadPage() {
     setProgress(10)
 
     try {
-      // ⬅️ Ambil Token Firebase
       const token = await auth.currentUser?.getIdToken()
-      const authHeaders = token ? { Authorization: `Bearer ${token}` } : {}
+      
+      // 🛡️ FIX TYPESCRIPT: Buat object bertipe Record<string, string>
+      const authHeaders: Record<string, string> = {}
+      if (token) {
+        authHeaders['Authorization'] = `Bearer ${token}`
+      }
 
       let audioUrl = ''
       let coverUrl = null
@@ -67,10 +71,9 @@ export default function UploadPage() {
       audioData.append('file', audioFile)
       audioData.append('type', 'audio')
       
-      // ⬅️ Tambahkan authHeaders
       const audioRes = await fetch('/api/upload', { 
         method: 'POST', 
-        headers: authHeaders, 
+        headers: authHeaders, // Sekarang tipenya valid
         body: audioData 
       })
       const audioJson = await audioRes.json()
@@ -85,10 +88,9 @@ export default function UploadPage() {
         coverData.append('file', coverFile)
         coverData.append('type', 'cover')
         
-        // ⬅️ Tambahkan authHeaders
         const coverRes = await fetch('/api/upload', { 
           method: 'POST', 
-          headers: authHeaders, 
+          headers: authHeaders, // Sekarang tipenya valid
           body: coverData 
         })
         const coverJson = await coverRes.json()
@@ -103,10 +105,9 @@ export default function UploadPage() {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          ...authHeaders // ⬅️ Tambahkan authHeaders
+          ...authHeaders // Spread operator (aman dari undefined)
         },
         body: JSON.stringify({
-          // ⬅️ HAPUS uid & uploader_name (Server akan mengambil dari token)
           title,
           artist: artist || 'Unknown',
           cover_url: coverUrl,

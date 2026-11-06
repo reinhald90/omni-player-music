@@ -1,9 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
+import { adminAuth } from '@/lib/firebase-admin'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+
+// Helper cek token (tidak wajib login untuk lihat profil)
+async function getOptionalUid(req: NextRequest): Promise<string | null> {
+  try {
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return null
+    if (!adminAuth) return null
+    const token = authHeader.split('Bearer ')[1]
+    const decodedToken = await adminAuth.verifyIdToken(token)
+    return decodedToken.uid
+  } catch (error) {
+    return null
+  }
+}
 
 export async function GET(
   req: NextRequest,
@@ -17,7 +32,8 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Identifier tidak valid' }, { status: 400 })
     }
 
-    // Cek apakah identifier berupa angka (id_number) atau string (username / firebase_uid)
+    // Cek apakah yang request adalah pemilik profil
+    const requesterUid = await getOptionalUid(req)
     const isNumeric = /^\d+$/.test(identifier)
 
     let userRes
@@ -30,7 +46,6 @@ export async function GET(
         FROM users WHERE id_number = ${numericId}
       `
     } else {
-      // Cari berdasarkan username atau firebase_uid
       userRes = await sql`
         SELECT firebase_uid, id_number, username, name, email, avatar_url, cover_url, bio, is_verified, role, role_color, created_at, border_style, layout_theme,
                avatar_scale, avatar_x, avatar_y, avatar_start_time, avatar_end_time,
@@ -45,9 +60,13 @@ export async function GET(
 
     const user = userRes[0]
     const targetFirebaseUid = user.firebase_uid
+    const isOwner = requesterUid === targetFirebaseUid
 
-    // Ambil lagu komunitas berdasarkan firebase_uid user tersebut
-    const songsRes = await sql`SELECT * FROM community_songs WHERE user_id = ${targetFirebaseUid} ORDER BY created_at DESC`
+    // Jangan pakai SELECT * agar kolom sensitif tidak bocor
+    const songsRes = await sql`
+      SELECT id, user_id, uploader_name, title, artist, cover_url, audio_url, created_at 
+      FROM community_songs WHERE user_id = ${targetFirebaseUid} ORDER BY created_at DESC
+    `
 
     return NextResponse.json(
       { 
@@ -58,7 +77,8 @@ export async function GET(
             idNumber: user.id_number || null,
             username: user.username || null,
             name: user.name || 'User',
-            email: user.email || '', // Sembunyikan jika ingin privasi publik total
+            // 🛡️ SEMBUNYIKAN EMAIL DARI PUBLIK
+            email: isOwner ? user.email : '', 
             avatar: user.avatar_url || null,
             coverUrl: user.cover_url || null,
             bio: user.bio || '',

@@ -17,6 +17,7 @@ export async function GET() {
     `
     return NextResponse.json({ success: true, data: topListeners })
   } catch (error: any) {
+    console.error('[Leaderboard Error]', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
