@@ -14,7 +14,7 @@ export interface User {
   id: string; name: string; email: string; avatar?: string; coverUrl?: string;
   avatarScale?: number; avatarX?: number; avatarY?: number; avatarStart?: number; avatarEnd?: number;
   coverScale?: number; coverX?: number; coverY?: number; coverStart?: number; coverEnd?: number;
-  bio?: string; borderStyle?: string; layoutTheme?: string; joinedAt?: number; role?: string; isVerified?: boolean;
+  bio?: string; borderStyle?: string; layoutTheme?: string; joinedAt?: number; role?: string; roleColor?: string; isVerified?: boolean;
 }
 
 interface AuthState {
@@ -34,57 +34,119 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const currentUser = get().user
     if (!currentUser) return
     try {
-      await fetch('/api/db/profile', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid: currentUser.id, name: currentUser.name, email: currentUser.email, avatar_url: currentUser.avatar })
-      })
-      const res = await fetch(`/api/db/profile?uid=${currentUser.id}`)
+      // 1. Ambil dulu data asli dari database (jangan ditimpa POST dulu)
+      const res = await fetch(`/api/db/profile?uid=${currentUser.id}&t=${Date.now()}`, { cache: 'no-store' })
       const json = await res.json()
-      if (json.success) {
+
+      if (json.success && json.name) {
+        const dbData = json.data || json
         set({ 
           user: { 
-            ...currentUser, name: json.name || currentUser.name, avatar: json.avatar_url || currentUser.avatar,
-            role: json.role, isVerified: json.is_verified, coverUrl: json.cover_url || currentUser.coverUrl,
-            bio: json.bio || currentUser.bio, borderStyle: json.border_style || currentUser.borderStyle, layoutTheme: json.layout_theme || currentUser.layoutTheme,
-            avatarScale: json.avatar_scale, avatarX: json.avatar_x, avatarY: json.avatar_y,
-            avatarStart: json.avatar_start_time, avatarEnd: json.avatar_end_time,
-            coverScale: json.cover_scale, coverX: json.cover_x, coverY: json.cover_y,
-            coverStart: json.cover_start_time, coverEnd: json.cover_end_time,
+            ...currentUser,
+            name: dbData.name ?? currentUser.name,
+            avatar: dbData.avatar_url ?? dbData.avatar ?? currentUser.avatar,
+            role: dbData.role ?? currentUser.role,
+            roleColor: dbData.role_color ?? dbData.roleColor ?? currentUser.roleColor,
+            isVerified: Boolean(dbData.is_verified ?? dbData.isVerified ?? currentUser.isVerified),
+            coverUrl: dbData.cover_url ?? dbData.coverUrl ?? currentUser.coverUrl,
+            bio: dbData.bio ?? currentUser.bio ?? '',
+            borderStyle: dbData.border_style ?? dbData.borderStyle ?? currentUser.borderStyle ?? '',
+            layoutTheme: dbData.layout_theme ?? dbData.layoutTheme ?? currentUser.layoutTheme ?? 'default',
+            avatarScale: Number(dbData.avatar_scale ?? dbData.avatarScale ?? 1),
+            avatarX: Number(dbData.avatar_x ?? dbData.avatarX ?? 0),
+            avatarY: Number(dbData.avatar_y ?? dbData.avatarY ?? 0),
+            avatarStart: Number(dbData.avatar_start_time ?? dbData.avatarStart ?? 0),
+            avatarEnd: Number(dbData.avatar_end_time ?? dbData.avatarEnd ?? 10),
+            coverScale: Number(dbData.cover_scale ?? dbData.coverScale ?? 1),
+            coverX: Number(dbData.cover_x ?? dbData.coverX ?? 0),
+            coverY: Number(dbData.cover_y ?? dbData.coverY ?? 0),
+            coverStart: Number(dbData.cover_start_time ?? dbData.coverStart ?? 0),
+            coverEnd: Number(dbData.cover_end_time ?? dbData.coverEnd ?? 10),
           } 
         })
+      } else {
+        // 2. Jika user baru dan belum ada di DB, baru daftarkan via POST
+        await fetch('/api/db/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uid: currentUser.id,
+            name: currentUser.name,
+            email: currentUser.email,
+            avatar_url: currentUser.avatar || ''
+          })
+        })
       }
-    } catch (e) { console.error(e) }
+    } catch (e) {
+      console.error('Error refreshUserStatus:', e)
+    }
   },
 
   updateProfileData: async (data) => {
     const currentUser = get().user
     if (!currentUser) return
     try {
+      // 🔥 GABUNGKAN STATE LAMA & BARU AGAR TIDAK ADA FIELD YANG TERTIMPA UNDEFINED/NULL 🔥
+      const merged: User = { ...currentUser, ...data }
+
       const payload = { 
-        uid: currentUser.id, name: data.name, avatar_url: data.avatar, cover_url: data.coverUrl,
-        avatar_scale: data.avatarScale, avatar_x: data.avatarX, avatar_y: data.avatarY,
-        avatar_start_time: data.avatarStart, avatar_end_time: data.avatarEnd,
-        cover_scale: data.coverScale, cover_x: data.coverX, cover_y: data.coverY,
-        cover_start_time: data.coverStart, cover_end_time: data.coverEnd,
-        bio: data.bio, border_style: data.borderStyle, layout_theme: data.layoutTheme
+        uid: merged.id,
+        name: merged.name || 'User',
+        email: merged.email || '',
+        avatar_url: merged.avatar ?? '',
+        cover_url: merged.coverUrl ?? '',
+        avatar_scale: merged.avatarScale ?? 1,
+        avatar_x: merged.avatarX ?? 0,
+        avatar_y: merged.avatarY ?? 0,
+        avatar_start_time: merged.avatarStart ?? 0,
+        avatar_end_time: merged.avatarEnd ?? 10,
+        cover_scale: merged.coverScale ?? 1,
+        cover_x: merged.coverX ?? 0,
+        cover_y: merged.coverY ?? 0,
+        cover_start_time: merged.coverStart ?? 0,
+        cover_end_time: merged.coverEnd ?? 10,
+        bio: merged.bio ?? '',
+        border_style: merged.borderStyle ?? '',
+        layout_theme: merged.layoutTheme ?? 'default'
       }
-      const res = await fetch('/api/db/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+
+      const res = await fetch('/api/db/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Gagal update database')
-      if (auth.currentUser && data.name) await updateProfile(auth.currentUser, { displayName: data.name })
-      set({ user: { ...currentUser, ...data } })
-    } catch (e) { console.error('Gagal update profil:', e); throw e }
+
+      if (auth.currentUser && data.name) {
+        await updateProfile(auth.currentUser, { displayName: data.name })
+      }
+
+      set({ user: merged })
+    } catch (e) {
+      console.error('Gagal update profil:', e)
+      throw e
+    }
   },
 
   initAuth: () => {
     onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         set({
-          user: { id: firebaseUser.uid, name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User', email: firebaseUser.email || '', avatar: firebaseUser.photoURL || undefined, joinedAt: firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime).getTime() : Date.now() },
-          isAuthenticated: true, initialized: true,
+          user: {
+            id: firebaseUser.uid,
+            name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+            email: firebaseUser.email || '',
+            avatar: firebaseUser.photoURL || undefined,
+            joinedAt: firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime).getTime() : Date.now()
+          },
+          isAuthenticated: true,
+          initialized: true,
         })
-        get().refreshUserStatus()
-      } else set({ user: null, isAuthenticated: false, initialized: true })
+        await get().refreshUserStatus()
+      } else {
+        set({ user: null, isAuthenticated: false, initialized: true })
+      }
     })
   },
 

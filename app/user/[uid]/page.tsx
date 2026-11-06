@@ -2,14 +2,15 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import Image from 'next/image'
+import { useAuthStore } from '@/store/authStore'
 import { usePlayerStore } from '@/store/playerStore'
 import { useHistoryStore } from '@/store/historyStore'
-import { BadgeCheck, ArrowLeft, Play, Music2, Loader2, Calendar, ShieldCheck, Crown } from 'lucide-react'
+import { BadgeCheck, ArrowLeft, Play, Music2, Loader2, Calendar, ShieldCheck, Crown, Share2, Pencil, Check } from 'lucide-react'
 import type { Song } from '@/types'
 import { clsx } from 'clsx'
 
-// 🔥 ENGINE BIO DINAMIS UNTUK PROFIL PUBLIK 🔥
 const BioRenderer = ({ html, uid = 'pub' }: { html: string, uid?: string }) => {
   const [height, setHeight] = useState(72)
   const channelId = `BIO_PUB_RESIZE_${uid}`
@@ -17,7 +18,7 @@ const BioRenderer = ({ html, uid = 'pub' }: { html: string, uid?: string }) => {
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
       if (e.data?.type === channelId && typeof e.data.height === 'number') {
-        setHeight(Math.max(56, Math.min(e.data.height, 2500)))
+        setHeight(Math.max(56, Math.min(e.data.height, 3000)))
       }
     }
     window.addEventListener('message', handleMessage)
@@ -35,27 +36,15 @@ const BioRenderer = ({ html, uid = 'pub' }: { html: string, uid?: string }) => {
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
     *, *::before, *::after { box-sizing: border-box; }
     html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
+      margin: 0; padding: 0; width: 100%;
       font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-      color: #ffffff;
-      background: transparent;
-      overflow-x: hidden;
-      overflow-y: hidden;
+      color: #ffffff; background: transparent; overflow: hidden;
       -webkit-font-smoothing: antialiased;
     }
     #bio-wrapper {
-      width: 100%;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      gap: 10px;
-      word-wrap: break-word;
-      overflow-wrap: break-word;
+      width: 100%; padding: 16px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; text-align: center; gap: 10px;
+      word-wrap: break-word; overflow-wrap: break-word;
     }
     a { color: #38bdf8; text-decoration: none; font-weight: 600; }
     a:hover { text-decoration: underline; }
@@ -84,8 +73,8 @@ const BioRenderer = ({ html, uid = 'pub' }: { html: string, uid?: string }) => {
       new ResizeObserver(updateHeight).observe(wrap);
     }
     new MutationObserver(updateHeight).observe(wrap, { childList: true, subtree: true, attributes: true, characterData: true });
-    setTimeout(updateHeight, 100);
-    setTimeout(updateHeight, 400);
+    setTimeout(updateHeight, 80);
+    setTimeout(updateHeight, 350);
     setInterval(updateHeight, 600);
   </script>
 </body>
@@ -103,26 +92,42 @@ const BioRenderer = ({ html, uid = 'pub' }: { html: string, uid?: string }) => {
   )
 }
 
-const parseBorderStyle = (raw?: string, isOwner?: boolean) => {
+const resolveUserBorder = (raw?: string | null, isOwner?: boolean, isVerified?: boolean) => {
   const str = (raw || '').trim()
   if (!str) {
-    return {
-      type: isOwner ? 'gradient' : 'none',
-      value: isOwner ? 'linear-gradient(135deg, #fde047 0%, #f59e0b 50%, #fef08a 100%)' : '#262626'
-    }
+    if (isOwner) return { mode: 'gradient', css: 'linear-gradient(135deg, #fde047 0%, #f59e0b 50%, #fef08a 100%)', glow: true }
+    if (isVerified) return { mode: 'gradient', css: 'linear-gradient(135deg, #38bdf8 0%, #3b82f6 50%, #818cf8 100%)', glow: true }
+    return { mode: 'none', css: '#262626', glow: false }
   }
   if (str.startsWith('<svg')) {
-    return { type: 'url', value: `url("data:image/svg+xml;utf8,${encodeURIComponent(str)}")` }
+    return { mode: 'svg-raw', svg: str, glow: true }
   }
   if (str.includes('url(')) {
-    const match = str.match(/url\((['"]?)(.*?)\1\)/)
-    const cleanUrl = match ? `url("${match[2]}")` : str
-    return { type: 'url', value: cleanUrl }
+    const match = str.match(/url\(\s*(['"]?)(.*?)\1\s*\)/i)
+    const innerUrl = match ? match[2] : ''
+    if (innerUrl.startsWith('data:image/svg+xml')) {
+      try {
+        const commaIdx = innerUrl.indexOf(',')
+        if (commaIdx !== -1) {
+          const payload = innerUrl.slice(commaIdx + 1)
+          const decoded = decodeURIComponent(payload)
+          if (decoded.trim().startsWith('<svg')) {
+            return { mode: 'svg-raw', svg: decoded, glow: true }
+          }
+        }
+      } catch (e) {}
+    }
+    if (innerUrl) {
+      return { mode: 'img-src', src: innerUrl, glow: true }
+    }
+  }
+  if (str.startsWith('http://') || str.startsWith('https://') || str.startsWith('data:image/')) {
+    return { mode: 'img-src', src: str, glow: true }
   }
   if (str.includes('gradient')) {
-    return { type: 'gradient', value: str }
+    return { mode: 'gradient', css: str, glow: true }
   }
-  return { type: 'color', value: str }
+  return { mode: 'gradient', css: str, glow: false }
 }
 
 const VideoPlayer = ({ src, start = 0, end = 10, className, style }: { src: string, start: number, end: number, className?: string, style?: any }) => {
@@ -149,16 +154,29 @@ interface UserProfile {
 interface CommunitySong { id: string; user_id: string; uploader_name: string; title: string; artist: string; cover_url: string | null; audio_url: string; created_at: string; }
 
 export default function PublicProfilePage() {
-  const params = useParams(); const router = useRouter(); const uid = params.uid as string
+  const params = useParams(); const router = useRouter()
+  const rawUid = Array.isArray(params?.uid) ? params.uid[0] : params?.uid
+  const uid = rawUid ? decodeURIComponent(rawUid) : ''
+
+  const authUser = useAuthStore((s) => s.user)
   const [data, setData] = useState<{ user: UserProfile, songs: CommunitySong[] } | null>(null)
   const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
   const setCurrent = usePlayerStore((s) => s.setCurrent); const current = usePlayerStore((s) => s.current); const addHistory = useHistoryStore((s) => s.add)
 
   useEffect(() => {
     if (!uid) return
     const fetchProfile = async () => {
-      try { const res = await fetch(`/api/db/users/${uid}`); const json = await res.json(); if (json.success) setData(json.data); else setError(json.error) } 
-      catch (e: any) { setError('Gagal memuat profil') } finally { setLoading(false) }
+      try {
+        const res = await fetch(`/api/db/users/${encodeURIComponent(uid)}?t=${Date.now()}`, { cache: 'no-store' })
+        const json = await res.json()
+        if (json.success) setData(json.data)
+        else setError(json.error)
+      } catch (e: any) {
+        setError('Gagal memuat profil')
+      } finally {
+        setLoading(false)
+      }
     }
     fetchProfile()
   }, [uid])
@@ -168,56 +186,115 @@ export default function PublicProfilePage() {
     setCurrent(playerSong); addHistory(playerSong)
   }
 
-  if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-white" size={32} /></div>
+  const handleShare = () => {
+    if (typeof window === 'undefined') return
+    navigator.clipboard.writeText(window.location.href)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  if (loading) return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="animate-spin text-white" size={32} /></div>
   if (error || !data) return <div className="text-center py-20 text-red-400">{error || 'User tidak ditemukan'}</div>
 
-  const { user, songs } = data
-  const joinedDate = new Date(user.joinedAt).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })
-  const isOwner = user.role === 'owner'; const roleColor = user.roleColor || (isOwner ? '#f59e0b' : '#ffffff')
-  const isCoverVideo = user.coverUrl?.match(/\.(mp4|webm|ogg)$/i); const isAvatarVideo = user.avatar?.match(/\.(mp4|webm|ogg)$/i)
+  const { user: dbUser, songs } = data
+  const isOwnProfile = authUser?.id === dbUser.id
+
+  const user: UserProfile = isOwnProfile
+    ? {
+        ...dbUser,
+        name: authUser?.name || dbUser.name,
+        bio: authUser?.bio ?? dbUser.bio,
+        avatar: authUser?.avatar || dbUser.avatar,
+        coverUrl: authUser?.coverUrl || dbUser.coverUrl,
+        borderStyle: authUser?.borderStyle || dbUser.borderStyle,
+        layoutTheme: authUser?.layoutTheme || dbUser.layoutTheme,
+        avatarScale: authUser?.avatarScale ?? dbUser.avatarScale,
+        avatarX: authUser?.avatarX ?? dbUser.avatarX,
+        avatarY: authUser?.avatarY ?? dbUser.avatarY,
+        avatarStart: authUser?.avatarStart ?? dbUser.avatarStart,
+        avatarEnd: authUser?.avatarEnd ?? dbUser.avatarEnd,
+        coverScale: authUser?.coverScale ?? dbUser.coverScale,
+        coverX: authUser?.coverX ?? dbUser.coverX,
+        coverY: authUser?.coverY ?? dbUser.coverY,
+        coverStart: authUser?.coverStart ?? dbUser.coverStart,
+        coverEnd: authUser?.coverEnd ?? dbUser.coverEnd,
+      }
+    : dbUser
+
+  const joinedDate = user.joinedAt ? new Date(user.joinedAt).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Baru saja'
+  const isOwner = user.role === 'owner'
+  const roleColor = user.roleColor || (isOwner ? '#f59e0b' : '#ffffff')
   const isMinimalist = user.layoutTheme === 'minimalist'
-  const parsedBorder = parseBorderStyle(user.borderStyle, isOwner)
+  const borderInfo = resolveUserBorder(user.borderStyle, isOwner, user.isVerified)
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 animate-[fadeIn_0.3s_ease]">
-      <button onClick={() => router.back()} className="inline-flex items-center gap-2 text-xs font-bold text-white/50 hover:text-white mb-6 transition-colors"><ArrowLeft size={14} /> Kembali</button>
+    <div className="max-w-2xl mx-auto px-4 py-8 animate-[fadeIn_0.3s_ease]">
+      <div className="flex items-center justify-between mb-6">
+        <button onClick={() => router.back()} className="inline-flex items-center gap-2 text-xs font-bold text-white/50 hover:text-white transition-colors">
+          <ArrowLeft size={14} /> Kembali
+        </button>
+        <button onClick={handleShare} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-white transition-all">
+          {copied ? <><Check size={13} className="text-emerald-400" /> Link Disalin</> : <><Share2 size={13} /> Bagikan Profil</>}
+        </button>
+      </div>
 
-      <div className="bg-[#121212] rounded-3xl overflow-hidden border border-white/5 shadow-2xl relative mb-8">
+      <div className="bg-[#121212] rounded-3xl overflow-hidden border border-white/5 shadow-2xl relative">
+        
         {!isMinimalist && (
           <div className="relative aspect-[21/9] w-full bg-[#1a1a1a] overflow-hidden">
-            <div className="absolute inset-0 overflow-hidden"><MediaRenderer src={user.coverUrl || ''} start={user.coverStart || 0} end={user.coverEnd || 10} style={isCoverVideo ? { transform: `scale(${user.coverScale || 1}) translate(${user.coverX || 0}%, ${user.coverY || 0}%)` } : {}} className="w-full h-full object-cover" /></div>
-            <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent opacity-60 pointer-events-none" />
+            <div className="absolute inset-0 overflow-hidden">
+              <MediaRenderer 
+                src={user.coverUrl || ''} 
+                start={user.coverStart || 0} 
+                end={user.coverEnd || 10} 
+                style={{ transform: `scale(${user.coverScale || 1}) translate(${user.coverX || 0}%, ${user.coverY || 0}%)` }} 
+                className="w-full h-full object-cover transition-transform duration-75" 
+              />
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent opacity-65 pointer-events-none" />
           </div>
         )}
 
         <div className={clsx("px-6 pb-6 relative", isMinimalist && "pt-10")}>
           <div className={clsx("flex justify-between items-end mb-4", !isMinimalist && "-mt-14")}>
             
+            {/* AVATAR + BORDER RENDERER */}
             <div className="relative flex items-center justify-center">
               <div className="relative w-28 h-28 flex items-center justify-center">
                 
-                {parsedBorder.type === 'url' && (
+                {borderInfo.mode === 'svg-raw' && (
                   <div 
-                    className="absolute -inset-3.5 rounded-full pointer-events-none z-20"
-                    style={{ 
-                      backgroundImage: parsedBorder.value,
-                      backgroundSize: 'contain',
-                      backgroundPosition: 'center',
-                      backgroundRepeat: 'no-repeat'
-                    }}
+                    className="absolute -inset-3.5 pointer-events-none z-20 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
+                    dangerouslySetInnerHTML={{ __html: borderInfo.svg || '' }}
+                  />
+                )}
+
+                {borderInfo.mode === 'img-src' && (
+                  <img 
+                    src={borderInfo.src} 
+                    alt="Frame" 
+                    className="absolute -inset-3.5 w-[calc(100%+28px)] h-[calc(100%+28px)] object-contain pointer-events-none z-20"
                   />
                 )}
 
                 <div 
                   className={clsx(
-                    "relative w-24 h-24 rounded-full p-[2.5px] flex items-center justify-center transition-all duration-300",
-                    (isOwner || parsedBorder.type === 'gradient') && "shadow-[0_0_22px_rgba(245,158,11,0.3)]"
+                    "relative w-24 h-24 rounded-full p-[3px] flex items-center justify-center transition-all duration-300",
+                    borderInfo.glow && "shadow-[0_0_20px_rgba(245,158,11,0.28)]"
                   )}
-                  style={{ background: parsedBorder.type !== 'url' ? parsedBorder.value : '#121212' }}
+                  style={{ 
+                    background: borderInfo.mode === 'gradient' ? borderInfo.css : '#181818' 
+                  }}
                 >
-                  <div className="relative w-full h-full rounded-full bg-[#1a1a1a] overflow-hidden flex items-center justify-center text-white text-3xl font-black z-10 border-[2.5px] border-[#121212]">
+                  <div className="relative w-full h-full rounded-full bg-[#1a1a1a] overflow-hidden flex items-center justify-center text-white text-3xl font-black z-10 border-[2px] border-[#121212]">
                     {user.avatar ? (
-                      <MediaRenderer src={user.avatar} start={user.avatarStart || 0} end={user.avatarEnd || 10} style={isAvatarVideo ? { transform: `scale(${user.avatarScale || 1}) translate(${user.avatarX || 0}%, ${user.avatarY || 0}%)` } : {}} className="w-full h-full object-cover" />
+                      <MediaRenderer 
+                        src={user.avatar} 
+                        start={user.avatarStart || 0} 
+                        end={user.avatarEnd || 10} 
+                        style={{ transform: `scale(${user.avatarScale || 1}) translate(${user.avatarX || 0}%, ${user.avatarY || 0}%)` }} 
+                        className="w-full h-full object-cover transition-transform duration-75" 
+                      />
                     ) : user.name.charAt(0).toUpperCase()}
                   </div>
                 </div>
@@ -239,8 +316,17 @@ export default function PublicProfilePage() {
 
               </div>
             </div>
-            <div className="mb-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-full border text-xs font-black uppercase tracking-wider" style={{ color: roleColor, borderColor: `${roleColor}40`, backgroundColor: `${roleColor}15` }}>
-              {isOwner ? <Crown size={14} /> : <ShieldCheck size={14} />} {user.role}
+
+            <div className="mb-2 flex items-center gap-2">
+              {isOwnProfile ? (
+                <Link href="/profile" className="flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-white text-black text-xs font-bold hover:scale-105 active:scale-95 transition-all shadow-lg">
+                  <Pencil size={14} /> Edit Profil
+                </Link>
+              ) : (
+                <div className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border text-xs font-black uppercase tracking-wider" style={{ color: roleColor, borderColor: `${roleColor}40`, backgroundColor: `${roleColor}15` }}>
+                  {isOwner ? <Crown size={14} /> : <ShieldCheck size={14} />} {user.role || 'user'}
+                </div>
+              )}
             </div>
           </div>
 
@@ -255,9 +341,10 @@ export default function PublicProfilePage() {
               {user.isVerified && <BadgeCheck size={20} className="text-blue-500" />}
             </div>
             <p className="text-sm text-white/50">{user.email}</p>
-            <div className="flex flex-wrap gap-4 mt-4 mb-4">
-              <div className="flex items-center gap-1.5 text-xs text-white/60 font-semibold"><Calendar size={14} /> Gabung {joinedDate}</div>
-              <div className="flex items-center gap-1.5 text-xs text-white/60 font-semibold"><Music2 size={14} /> {songs.length} Lagu di-upload</div>
+            
+            <div className="flex flex-wrap gap-2 mt-3 mb-4">
+              {user.isVerified && <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider"><ShieldCheck size={12} /> Terverifikasi</div>}
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider" style={{ color: roleColor, borderColor: `${roleColor}40`, backgroundColor: `${roleColor}15` }}>{isOwner ? <Crown size={12} /> : <ShieldCheck size={12} />} {user.role || 'user'}</div>
             </div>
             
             {user.bio ? (
@@ -273,34 +360,59 @@ export default function PublicProfilePage() {
         </div>
 
         {!isMinimalist && (
-          <div className="grid grid-cols-2 border-t border-white/5 divide-x divide-white/5 bg-[#0a0a0a]">
-            <div className="p-4 flex flex-col items-center justify-center"><Music2 size={16} className="text-white/60 mb-1" /><div className="text-lg font-black text-white">{songs.length}</div><div className="text-[9px] text-white/40 uppercase tracking-wider font-bold">Lagu Komunitas</div></div>
-            <div className="p-4 flex flex-col items-center justify-center"><ShieldCheck size={16} className="text-white/60 mb-1" /><div className="text-lg font-black text-white">{user.isVerified ? 'Verified' : 'Member'}</div><div className="text-[9px] text-white/40 uppercase tracking-wider font-bold">Status Akun</div></div>
+          <div className="grid grid-cols-3 border-t border-white/5 divide-x divide-white/5 bg-[#0a0a0a]">
+            <div className="p-4 flex flex-col items-center justify-center"><Music2 size={16} className="text-white/60 mb-1" /><div className="text-lg font-black text-white">{songs.length}</div><div className="text-[9px] text-white/40 uppercase tracking-wider font-bold">Karya Lagu</div></div>
+            <div className="p-4 flex flex-col items-center justify-center"><ShieldCheck size={16} className="text-white/60 mb-1" /><div className="text-lg font-black text-white">{user.isVerified ? 'Verified' : 'Member'}</div><div className="text-[9px] text-white/40 uppercase tracking-wider font-bold">Status</div></div>
+            <div className="p-4 flex flex-col items-center justify-center"><Crown size={16} className="text-white/60 mb-1" /><div className="text-lg font-black text-white uppercase">{user.role || 'User'}</div><div className="text-[9px] text-white/40 uppercase tracking-wider font-bold">Role</div></div>
           </div>
         )}
       </div>
 
-      <h2 className="text-lg font-black mb-4 flex items-center gap-2"><Music2 size={18} className="text-white" /> Karya {user.name}</h2>
-      
-      {songs.length === 0 ? (
-        <div className="bg-[#121212] border border-white/5 rounded-2xl p-10 text-center text-white/40 text-sm">User ini belum mengunggah lagu apapun.</div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {songs.map((song) => {
-            const isCurrent = current?.id === song.id
-            return (
-              <div key={song.id} onClick={() => handlePlay(song)} className="group relative bg-[#121212] hover:bg-[#181818] p-3 rounded-xl cursor-pointer transition-all border border-transparent hover:border-white/5">
-                <div className="relative aspect-square w-full rounded-lg overflow-hidden mb-3 bg-[#1a1a1a]">
-                  {song.cover_url ? <Image src={song.cover_url} alt={song.title} fill className="object-cover" /> : <div className="w-full h-full bg-brand/10 flex items-center justify-center"><Music2 className="text-white/20" /></div>}
-                  <div className={clsx("absolute bottom-2 right-2 w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-lg transition-all", isCurrent ? "opacity-100" : "opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0")}><Play size={16} fill="currentColor" className="ml-0.5" /></div>
-                </div>
-                <h3 className="text-sm font-bold truncate text-white">{song.title}</h3>
-                <p className="text-[11px] text-white/50 truncate mt-1">{song.artist}</p>
-              </div>
-            )
-          })}
+      <div className="mt-6 space-y-3">
+        <h3 className="text-[11px] font-black uppercase tracking-widest text-white/40 px-2">Info Akun</h3>
+        <div className="bg-[#121212] rounded-2xl p-4 border border-white/5 flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/60"><Calendar size={18} /></div>
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-white/40">Bergabung Sejak</div>
+            <div className="text-sm font-extrabold text-white">{joinedDate}</div>
+          </div>
         </div>
-      )}
+        <div className="bg-[#121212] rounded-2xl p-4 border border-white/5 flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/60"><ShieldCheck size={18} /></div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-white/40">ID Firebase</div>
+            <div className="text-xs font-mono text-white/70 truncate">{user.id}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8">
+        <h2 className="text-sm font-black uppercase tracking-wider text-white mb-4 flex items-center gap-2 px-1">
+          <Music2 size={18} className="text-white" /> Karya {user.name}
+        </h2>
+        
+        {songs.length === 0 ? (
+          <div className="bg-[#121212] border border-white/5 rounded-3xl p-10 text-center text-white/40 text-xs italic">
+            Pengguna ini belum mengunggah karya lagu.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            {songs.map((song) => {
+              const isCurrent = current?.id === song.id
+              return (
+                <div key={song.id} onClick={() => handlePlay(song)} className="group relative bg-[#121212] hover:bg-[#181818] p-3 rounded-2xl cursor-pointer transition-all border border-white/5 hover:border-white/15">
+                  <div className="relative aspect-square w-full rounded-xl overflow-hidden mb-3 bg-[#1a1a1a]">
+                    {song.cover_url ? <Image src={song.cover_url} alt={song.title} fill className="object-cover" /> : <div className="w-full h-full bg-brand/10 flex items-center justify-center"><Music2 className="text-white/20" /></div>}
+                    <div className={clsx("absolute bottom-2 right-2 w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-lg transition-all", isCurrent ? "opacity-100" : "opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0")}><Play size={16} fill="currentColor" className="ml-0.5" /></div>
+                  </div>
+                  <h3 className="text-sm font-bold truncate text-white">{song.title}</h3>
+                  <p className="text-[11px] text-white/50 truncate mt-1">{song.artist}</p>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

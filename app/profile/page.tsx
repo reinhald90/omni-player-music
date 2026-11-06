@@ -16,7 +16,6 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
-// 🔥 ENGINE BIO DINAMIS (MENDUKUNG BANYAK SVG, ANIMASI CSS, & AUTO-EXPAND KE BAWAH) 🔥
 const BioRenderer = ({ html, uid = 'self' }: { html: string, uid?: string }) => {
   const [height, setHeight] = useState(72)
   const channelId = `BIO_RESIZE_${uid}`
@@ -24,7 +23,7 @@ const BioRenderer = ({ html, uid = 'self' }: { html: string, uid?: string }) => 
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
       if (e.data?.type === channelId && typeof e.data.height === 'number') {
-        setHeight(Math.max(56, Math.min(e.data.height, 2500)))
+        setHeight(Math.max(56, Math.min(e.data.height, 3000)))
       }
     }
     window.addEventListener('message', handleMessage)
@@ -42,27 +41,15 @@ const BioRenderer = ({ html, uid = 'self' }: { html: string, uid?: string }) => 
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
     *, *::before, *::after { box-sizing: border-box; }
     html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
+      margin: 0; padding: 0; width: 100%;
       font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-      color: #ffffff;
-      background: transparent;
-      overflow-x: hidden;
-      overflow-y: hidden;
+      color: #ffffff; background: transparent; overflow: hidden;
       -webkit-font-smoothing: antialiased;
     }
     #bio-wrapper {
-      width: 100%;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      gap: 10px;
-      word-wrap: break-word;
-      overflow-wrap: break-word;
+      width: 100%; padding: 16px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; text-align: center; gap: 10px;
+      word-wrap: break-word; overflow-wrap: break-word;
     }
     a { color: #38bdf8; text-decoration: none; font-weight: 600; }
     a:hover { text-decoration: underline; }
@@ -91,8 +78,8 @@ const BioRenderer = ({ html, uid = 'self' }: { html: string, uid?: string }) => 
       new ResizeObserver(updateHeight).observe(wrap);
     }
     new MutationObserver(updateHeight).observe(wrap, { childList: true, subtree: true, attributes: true, characterData: true });
-    setTimeout(updateHeight, 100);
-    setTimeout(updateHeight, 400);
+    setTimeout(updateHeight, 80);
+    setTimeout(updateHeight, 350);
     setInterval(updateHeight, 600);
   </script>
 </body>
@@ -110,27 +97,42 @@ const BioRenderer = ({ html, uid = 'self' }: { html: string, uid?: string }) => 
   )
 }
 
-// 🔥 PARSER BORDER UNIVERSAL (SVG MENTAH, DATA URI, URL GAMBAR, & CSS GRADIENT) 🔥
-const parseBorderStyle = (raw?: string, isOwner?: boolean) => {
+const resolveUserBorder = (raw?: string | null, isOwner?: boolean, isVerified?: boolean) => {
   const str = (raw || '').trim()
   if (!str) {
-    return {
-      type: isOwner ? 'gradient' : 'none',
-      value: isOwner ? 'linear-gradient(135deg, #fde047 0%, #f59e0b 50%, #fef08a 100%)' : '#262626'
-    }
+    if (isOwner) return { mode: 'gradient', css: 'linear-gradient(135deg, #fde047 0%, #f59e0b 50%, #fef08a 100%)', glow: true }
+    if (isVerified) return { mode: 'gradient', css: 'linear-gradient(135deg, #38bdf8 0%, #3b82f6 50%, #818cf8 100%)', glow: true }
+    return { mode: 'none', css: '#262626', glow: false }
   }
   if (str.startsWith('<svg')) {
-    return { type: 'url', value: `url("data:image/svg+xml;utf8,${encodeURIComponent(str)}")` }
+    return { mode: 'svg-raw', svg: str, glow: true }
   }
   if (str.includes('url(')) {
-    const match = str.match(/url\((['"]?)(.*?)\1\)/)
-    const cleanUrl = match ? `url("${match[2]}")` : str
-    return { type: 'url', value: cleanUrl }
+    const match = str.match(/url\(\s*(['"]?)(.*?)\1\s*\)/i)
+    const innerUrl = match ? match[2] : ''
+    if (innerUrl.startsWith('data:image/svg+xml')) {
+      try {
+        const commaIdx = innerUrl.indexOf(',')
+        if (commaIdx !== -1) {
+          const payload = innerUrl.slice(commaIdx + 1)
+          const decoded = decodeURIComponent(payload)
+          if (decoded.trim().startsWith('<svg')) {
+            return { mode: 'svg-raw', svg: decoded, glow: true }
+          }
+        }
+      } catch (e) {}
+    }
+    if (innerUrl) {
+      return { mode: 'img-src', src: innerUrl, glow: true }
+    }
+  }
+  if (str.startsWith('http://') || str.startsWith('https://') || str.startsWith('data:image/')) {
+    return { mode: 'img-src', src: str, glow: true }
   }
   if (str.includes('gradient')) {
-    return { type: 'gradient', value: str }
+    return { mode: 'gradient', css: str, glow: true }
   }
-  return { type: 'color', value: str }
+  return { mode: 'gradient', css: str, glow: false }
 }
 
 const createCroppedImage = async (imageSrc: string, crop: any) => {
@@ -245,7 +247,17 @@ export default function ProfilePage() {
     if (!editName.trim()) return setErrorMsg('Nama kosong.')
     setSaving(true); setErrorMsg(null)
     try { 
-      await updateProfileData({ name: editName, bio: editBio, avatar: avatarUrl, coverUrl: coverUrl, layoutTheme: editLayout, avatarScale, avatarX, avatarY, avatarStart, avatarEnd, coverScale, coverX, coverY, coverStart, coverEnd }); setIsEditing(false) 
+      await updateProfileData({ 
+        name: editName, 
+        bio: editBio, 
+        avatar: avatarUrl, 
+        coverUrl: coverUrl, 
+        layoutTheme: editLayout, 
+        borderStyle: user.borderStyle || '',
+        avatarScale, avatarX, avatarY, avatarStart, avatarEnd, 
+        coverScale, coverX, coverY, coverStart, coverEnd 
+      })
+      setIsEditing(false) 
     } catch (e: any) { setErrorMsg(e.message) } finally { setSaving(false) }
   }
 
@@ -265,8 +277,8 @@ export default function ProfilePage() {
 
   const isOwner = user.role === 'owner'
   const roleColor = (user as any).roleColor || (isOwner ? '#f59e0b' : '#ffffff')
-  const isMinimalist = user.layoutTheme === 'minimalist'
-  const parsedBorder = parseBorderStyle(user.borderStyle, isOwner)
+  const isMinimalist = (isEditing ? editLayout : user.layoutTheme) === 'minimalist'
+  const borderInfo = resolveUserBorder(user.borderStyle, isOwner, user.isVerified)
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8 animate-[fadeIn_0.3s_ease]">
@@ -276,8 +288,16 @@ export default function ProfilePage() {
         
         {!isMinimalist && (
           <div className="relative aspect-[21/9] w-full bg-[#1a1a1a] overflow-hidden group">
-            <div className="absolute inset-0 overflow-hidden"><MediaRenderer src={coverUrl} start={coverStart} end={coverEnd} style={{ transform: `scale(${coverScale}) translate(${coverX}%, ${coverY}%)` }} className="w-full h-full object-cover transition-transform duration-75" /></div>
-            <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent opacity-60 pointer-events-none" />
+            <div className="absolute inset-0 overflow-hidden">
+              <MediaRenderer 
+                src={coverUrl} 
+                start={coverStart} 
+                end={coverEnd} 
+                style={{ transform: `scale(${coverScale}) translate(${coverX}%, ${coverY}%)` }} 
+                className="w-full h-full object-cover transition-transform duration-75" 
+              />
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent opacity-65 pointer-events-none" />
             {isEditing && (
               <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10 gap-3">
                 <button onClick={() => coverInputRef.current?.click()} className="flex flex-col items-center gap-2 text-white font-bold text-xs uppercase bg-[#1a1a1a] px-5 py-2.5 rounded-lg hover:bg-white/20 border border-white/10">{uploadingMedia ? <Loader2 size={20} className="animate-spin" /> : <><ImageIcon size={20} /> Ganti Background</>}</button>
@@ -291,39 +311,47 @@ export default function ProfilePage() {
         <div className={clsx("px-6 pb-6 relative", isMinimalist && "pt-10")}>
           <div className={clsx("flex justify-between items-end mb-4", !isMinimalist && "-mt-14")}>
             
-            {/* 🔥 AVATAR + BORDER PRESISI SIMETRIS 🔥 */}
+            {/* AVATAR + BORDER */}
             <div className="relative group flex items-center justify-center">
               <div className="relative w-28 h-28 flex items-center justify-center">
                 
-                {/* 1A. LAYER SVG / IMAGE ANIMASI LUAR */}
-                {parsedBorder.type === 'url' && (
+                {borderInfo.mode === 'svg-raw' && (
                   <div 
-                    className="absolute -inset-3.5 rounded-full pointer-events-none z-20"
-                    style={{ 
-                      backgroundImage: parsedBorder.value,
-                      backgroundSize: 'contain',
-                      backgroundPosition: 'center',
-                      backgroundRepeat: 'no-repeat'
-                    }}
+                    className="absolute -inset-3.5 pointer-events-none z-20 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
+                    dangerouslySetInnerHTML={{ __html: borderInfo.svg || '' }}
                   />
                 )}
 
-                {/* 1B. LAYER CINCIN TIPIS & FOTO PROFIL */}
+                {borderInfo.mode === 'img-src' && (
+                  <img 
+                    src={borderInfo.src} 
+                    alt="Frame" 
+                    className="absolute -inset-3.5 w-[calc(100%+28px)] h-[calc(100%+28px)] object-contain pointer-events-none z-20"
+                  />
+                )}
+
                 <div 
                   className={clsx(
-                    "relative w-24 h-24 rounded-full p-[2.5px] flex items-center justify-center transition-all duration-300",
-                    (isOwner || parsedBorder.type === 'gradient') && "shadow-[0_0_22px_rgba(245,158,11,0.3)]"
+                    "relative w-24 h-24 rounded-full p-[3px] flex items-center justify-center transition-all duration-300",
+                    borderInfo.glow && "shadow-[0_0_20px_rgba(245,158,11,0.28)]"
                   )}
-                  style={{ background: parsedBorder.type !== 'url' ? parsedBorder.value : '#121212' }}
+                  style={{ 
+                    background: borderInfo.mode === 'gradient' ? borderInfo.css : '#181818' 
+                  }}
                 >
-                  <div className="relative w-full h-full rounded-full bg-[#1a1a1a] overflow-hidden flex items-center justify-center text-white text-3xl font-black z-10 border-[2.5px] border-[#121212]">
+                  <div className="relative w-full h-full rounded-full bg-[#1a1a1a] overflow-hidden flex items-center justify-center text-white text-3xl font-black z-10 border-[2px] border-[#121212]">
                     {avatarUrl ? (
-                      <MediaRenderer src={avatarUrl} start={avatarStart} end={avatarEnd} style={{ transform: `scale(${avatarScale}) translate(${avatarX}%, ${avatarY}%)` }} className="w-full h-full object-cover transition-transform duration-75" />
+                      <MediaRenderer 
+                        src={avatarUrl} 
+                        start={avatarStart} 
+                        end={avatarEnd} 
+                        style={{ transform: `scale(${avatarScale}) translate(${avatarX}%, ${avatarY}%)` }} 
+                        className="w-full h-full object-cover transition-transform duration-75" 
+                      />
                     ) : user.name.charAt(0).toUpperCase()}
                   </div>
                 </div>
 
-                {/* 2. BADGES (MAHKOTA & VERIFIED) */}
                 <div className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center">
                   <div className="relative w-24 h-24">
                     {user.isVerified && (
@@ -353,8 +381,12 @@ export default function ProfilePage() {
             <div className="mb-2 flex items-center gap-2">
               {!isEditing ? (
                 <>
-                  <Link href={`/user/${user.id}`} className="hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-white transition-all"><ExternalLink size={14} /> Profil Publik</Link>
-                  <button onClick={() => setIsEditing(true)} className="flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-white text-black text-xs font-bold hover:scale-105 active:scale-95 transition-all shadow-lg"><Pencil size={14} /> Edit Profil</button>
+                  <Link href={`/user/${user.id}`} className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-white transition-all" title="Lihat Profil Publik">
+                    <ExternalLink size={14} /> <span className="hidden sm:inline">Profil Publik</span>
+                  </Link>
+                  <button onClick={() => setIsEditing(true)} className="flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-white text-black text-xs font-bold hover:scale-105 active:scale-95 transition-all shadow-lg">
+                    <Pencil size={14} /> Edit Profil
+                  </button>
                 </>
               ) : (
                 <>
@@ -398,7 +430,6 @@ export default function ProfilePage() {
                   <button onClick={() => setEditLayout(editLayout === 'default' ? 'minimalist' : 'default')} className="flex items-center justify-center gap-2 py-3 bg-[#1a1a1a] border border-white/10 rounded-xl hover:bg-white/5 transition-all text-xs font-bold text-white"><LayoutTemplate size={16} /> Tema: {editLayout === 'default' ? 'Default' : 'Minimalis'}</button>
                 </div>
 
-                {/* 🔥 EDITOR BIO BERSIH & PROFESIONAL + LIVE PREVIEW OTOMATIS 🔥 */}
                 <div className="bg-[#1a1a1a] p-4 rounded-2xl border border-white/10 space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="text-[11px] text-white/70 font-bold uppercase tracking-wider flex items-center gap-1.5">
@@ -410,7 +441,7 @@ export default function ProfilePage() {
                   <textarea
                     value={editBio}
                     onChange={(e) => setEditBio(e.target.value)}
-                    placeholder="Tulis bio teks biasa, atau masukkan kode HTML, CSS, dan banyak animasi <svg> sekaligus..."
+                    placeholder="Tulis bio teks biasa, atau masukkan kode HTML, CSS, dan animasi <svg>..."
                     className="w-full min-h-[140px] bg-[#080808] border border-white/10 rounded-xl p-3.5 text-xs font-mono text-emerald-400 outline-none focus:border-white/30 resize-y leading-relaxed"
                   />
 
@@ -425,7 +456,6 @@ export default function ProfilePage() {
                 </div>
               </div>
             ) : (
-              /* 🔥 KOTAK BIO UTAMA (AUTO-HEIGHT MENGIKUTI BANYAKNYA ISI BIO) 🔥 */
               user.bio ? (
                 <div className="w-full bg-gradient-to-b from-[#181818] to-[#111111] rounded-2xl border border-white/10 overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                   <BioRenderer html={user.bio} uid={user.id} />
@@ -448,7 +478,6 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {/* INFO AKUN */}
       <div className="mt-6 space-y-3">
         <h3 className="text-[11px] font-black uppercase tracking-widest text-white/40 px-2">Info Akun</h3>
         <div className="bg-[#121212] rounded-2xl p-4 border border-white/5 flex items-center gap-3.5">
@@ -467,7 +496,6 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* DEVELOPER API KEYS */}
       <div className="mt-6 bg-[#121212] rounded-3xl p-6 border border-white/5">
         <div className="flex items-center gap-2 mb-4"><Key size={18} className="text-white" /><h2 className="text-sm font-black uppercase tracking-wider text-white">Developer API Keys</h2></div>
         <div className="flex gap-2 mb-4">
