@@ -72,6 +72,12 @@ export default function PublicProfilePage() {
   const isUrl = borderCss.includes('url')
   const isGradient = borderCss.includes('gradient')
 
+  const ringBackground = isGradient 
+    ? borderCss 
+    : isOwner 
+      ? 'linear-gradient(135deg, #fde047 0%, #f59e0b 50%, #fef08a 100%)' 
+      : '#262626'
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 animate-[fadeIn_0.3s_ease]">
       <button onClick={() => router.back()} className="inline-flex items-center gap-2 text-xs font-bold text-white/50 hover:text-white mb-6 transition-colors"><ArrowLeft size={14} /> Kembali</button>
@@ -84,43 +90,51 @@ export default function PublicProfilePage() {
         )}
 
         <div className={clsx("px-6 pb-6 relative", isMinimalist && "pt-10")}>
-          <div className={clsx("flex justify-between items-end mb-4", !isMinimalist && "-mt-16")}>
+          <div className={clsx("flex justify-between items-end mb-4", !isMinimalist && "-mt-14")}>
             
-            {/* 🔥 AVATAR & BORDER (FIX TOTAL) 🔥 */}
+            {/* 🔥 AVATAR & BORDER PRESISI (TIPIS & SIMETRIS) 🔥 */}
             <div className="relative flex items-center justify-center">
-              <div className="relative w-36 h-36 flex items-center justify-center">
+              <div className="relative w-28 h-28 flex items-center justify-center">
                 
-                {/* 1. LAPISAN BORDER (Di Belakang) */}
-                <div 
-                  className="absolute inset-0 rounded-full"
-                  style={{ 
-                    background: isGradient ? borderCss : undefined,
-                    backgroundImage: isUrl ? borderCss : undefined,
-                    backgroundColor: (!isGradient && !isUrl) ? '#1a1a1a' : 'transparent',
-                    backgroundSize: 'contain',
-                    backgroundPosition: 'center',
-                    backgroundRepeat: 'no-repeat'
-                  }}
-                />
+                {/* 1A. JIKA BORDER BERUPA GAMBAR DEKORASI (URL PNG/GIF) */}
+                {isUrl && (
+                  <div 
+                    className="absolute -inset-3 rounded-full pointer-events-none z-20"
+                    style={{ 
+                      backgroundImage: borderCss,
+                      backgroundSize: 'contain',
+                      backgroundPosition: 'center',
+                      backgroundRepeat: 'no-repeat'
+                    }}
+                  />
+                )}
 
-                {/* 2. FOTO PROFIL (Di Tengah) */}
-                <div className="relative w-24 h-24 rounded-full bg-[#1a1a1a] overflow-hidden flex items-center justify-center text-white text-3xl font-black z-10 border-[4px] border-[#121212]">
-                  {user.avatar ? (
-                    <MediaRenderer src={user.avatar} start={user.avatarStart || 0} end={user.avatarEnd || 10} style={isAvatarVideo ? { transform: `scale(${user.avatarScale || 1}) translate(${user.avatarX || 0}%, ${user.avatarY || 0}%)` } : {}} className="w-full h-full object-cover" />
-                  ) : user.name.charAt(0).toUpperCase()}
+                {/* 1B. CINCIN BORDER TIPIS & FOTO PROFIL */}
+                <div 
+                  className={clsx(
+                    "relative w-24 h-24 rounded-full p-[2.5px] flex items-center justify-center transition-all duration-300",
+                    (isOwner || isGradient) && "shadow-[0_0_20px_rgba(245,158,11,0.3)]"
+                  )}
+                  style={{ background: !isUrl ? ringBackground : '#121212' }}
+                >
+                  <div className="relative w-full h-full rounded-full bg-[#1a1a1a] overflow-hidden flex items-center justify-center text-white text-3xl font-black z-10 border-[2px] border-[#121212]">
+                    {user.avatar ? (
+                      <MediaRenderer src={user.avatar} start={user.avatarStart || 0} end={user.avatarEnd || 10} style={isAvatarVideo ? { transform: `scale(${user.avatarScale || 1}) translate(${user.avatarX || 0}%, ${user.avatarY || 0}%)` } : {}} className="w-full h-full object-cover" />
+                    ) : user.name.charAt(0).toUpperCase()}
+                  </div>
                 </div>
 
-                {/* 3. BADGES (Nempel di Foto) */}
-                <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center">
+                {/* 2. BADGES (MAHKOTA & VERIFIED PRESISI DI TEPI FOTO) */}
+                <div className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center">
                   <div className="relative w-24 h-24">
                     {user.isVerified && (
-                      <div className="absolute bottom-0 right-0 bg-[#121212] rounded-full p-1 shadow-lg translate-x-1 translate-y-1">
-                        <BadgeCheck size={20} className="text-blue-500 fill-blue-500/10" />
+                      <div className="absolute -bottom-0.5 -right-0.5 bg-[#121212] rounded-full p-0.5 shadow-lg">
+                        <BadgeCheck size={20} className="text-blue-500 fill-blue-500/20" />
                       </div>
                     )}
                     {isOwner && (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <Crown size={24} className="text-amber-400 drop-shadow-md" />
+                      <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                        <Crown size={22} className="text-amber-400 fill-amber-400/20 drop-shadow-[0_2px_6px_rgba(245,158,11,0.6)]" />
                       </div>
                     )}
                   </div>
@@ -134,7 +148,15 @@ export default function PublicProfilePage() {
           </div>
 
           <div>
-            <div className="flex items-center gap-1.5 mb-1"><h1 className="text-2xl font-black text-white">{user.name}</h1>{user.isVerified && <BadgeCheck size={20} className="text-blue-500" />}</div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <h1 className={clsx(
+                "text-2xl font-black",
+                isOwner ? "bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent" : "text-white"
+              )}>
+                {user.name}
+              </h1>
+              {user.isVerified && <BadgeCheck size={20} className="text-blue-500" />}
+            </div>
             <p className="text-sm text-white/50">{user.email}</p>
             <div className="flex flex-wrap gap-4 mt-4 mb-4">
               <div className="flex items-center gap-1.5 text-xs text-white/60 font-semibold"><Calendar size={14} /> Gabung {joinedDate}</div>

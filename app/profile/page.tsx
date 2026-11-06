@@ -153,12 +153,18 @@ export default function ProfilePage() {
   }
 
   const isOwner = user.role === 'owner'; const roleColor = (user as any).roleColor || (isOwner ? '#f59e0b' : '#ffffff')
-  
   const isMinimalist = user.layoutTheme === 'minimalist'
   
   const borderCss = user.borderStyle || ''
   const isUrl = borderCss.includes('url')
   const isGradient = borderCss.includes('gradient')
+
+  // Border tipis elegan (emas untuk Owner jika tidak pakai custom gradient/URL)
+  const ringBackground = isGradient 
+    ? borderCss 
+    : isOwner 
+      ? 'linear-gradient(135deg, #fde047 0%, #f59e0b 50%, #fef08a 100%)' 
+      : '#262626'
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8 animate-[fadeIn_0.3s_ease]">
@@ -180,43 +186,51 @@ export default function ProfilePage() {
         )}
 
         <div className={clsx("px-6 pb-6 relative", isMinimalist && "pt-10")}>
-          <div className={clsx("flex justify-between items-end mb-4", !isMinimalist && "-mt-16")}>
+          <div className={clsx("flex justify-between items-end mb-4", !isMinimalist && "-mt-14")}>
             
-            {/* 🔥 AVATAR & BORDER (FIX TOTAL) 🔥 */}
+            {/* 🔥 AVATAR & BORDER PRESISI (TIPIS & SIMETRIS) 🔥 */}
             <div className="relative group flex items-center justify-center">
-              <div className="relative w-36 h-36 flex items-center justify-center">
+              <div className="relative w-28 h-28 flex items-center justify-center">
                 
-                {/* 1. LAPISAN BORDER (Di Belakang) */}
-                <div 
-                  className="absolute inset-0 rounded-full"
-                  style={{ 
-                    background: isGradient ? borderCss : undefined,
-                    backgroundImage: isUrl ? borderCss : undefined,
-                    backgroundColor: (!isGradient && !isUrl) ? '#1a1a1a' : 'transparent',
-                    backgroundSize: 'contain',
-                    backgroundPosition: 'center',
-                    backgroundRepeat: 'no-repeat'
-                  }}
-                />
+                {/* 1A. JIKA BORDER BERUPA GAMBAR DEKORASI (URL PNG/GIF) */}
+                {isUrl && (
+                  <div 
+                    className="absolute -inset-3 rounded-full pointer-events-none z-20"
+                    style={{ 
+                      backgroundImage: borderCss,
+                      backgroundSize: 'contain',
+                      backgroundPosition: 'center',
+                      backgroundRepeat: 'no-repeat'
+                    }}
+                  />
+                )}
 
-                {/* 2. FOTO PROFIL (Di Tengah) */}
-                <div className="relative w-24 h-24 rounded-full bg-[#1a1a1a] overflow-hidden flex items-center justify-center text-white text-3xl font-black z-10 border-[4px] border-[#121212]">
-                  {avatarUrl ? (
-                    <MediaRenderer src={avatarUrl} start={avatarStart} end={avatarEnd} style={{ transform: `scale(${avatarScale}) translate(${avatarX}%, ${avatarY}%)` }} className="w-full h-full object-cover transition-transform duration-75" />
-                  ) : user.name.charAt(0).toUpperCase()}
+                {/* 1B. CINCIN BORDER TIPIS & FOTO PROFIL */}
+                <div 
+                  className={clsx(
+                    "relative w-24 h-24 rounded-full p-[2.5px] flex items-center justify-center transition-all duration-300",
+                    (isOwner || isGradient) && "shadow-[0_0_20px_rgba(245,158,11,0.3)]"
+                  )}
+                  style={{ background: !isUrl ? ringBackground : '#121212' }}
+                >
+                  <div className="relative w-full h-full rounded-full bg-[#1a1a1a] overflow-hidden flex items-center justify-center text-white text-3xl font-black z-10 border-[2px] border-[#121212]">
+                    {avatarUrl ? (
+                      <MediaRenderer src={avatarUrl} start={avatarStart} end={avatarEnd} style={{ transform: `scale(${avatarScale}) translate(${avatarX}%, ${avatarY}%)` }} className="w-full h-full object-cover transition-transform duration-75" />
+                    ) : user.name.charAt(0).toUpperCase()}
+                  </div>
                 </div>
 
-                {/* 3. BADGES (Nempel di Foto) */}
-                <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center">
+                {/* 2. BADGES (MAHKOTA & VERIFIED PRESISI DI TEPI FOTO) */}
+                <div className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center">
                   <div className="relative w-24 h-24">
                     {user.isVerified && (
-                      <div className="absolute bottom-0 right-0 bg-[#121212] rounded-full p-1 shadow-lg translate-x-1 translate-y-1">
-                        <BadgeCheck size={20} className="text-blue-500 fill-blue-500/10" />
+                      <div className="absolute -bottom-0.5 -right-0.5 bg-[#121212] rounded-full p-0.5 shadow-lg">
+                        <BadgeCheck size={20} className="text-blue-500 fill-blue-500/20" />
                       </div>
                     )}
                     {isOwner && (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <Crown size={24} className="text-amber-400 drop-shadow-md" />
+                      <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                        <Crown size={22} className="text-amber-400 fill-amber-400/20 drop-shadow-[0_2px_6px_rgba(245,158,11,0.6)]" />
                       </div>
                     )}
                   </div>
@@ -225,7 +239,7 @@ export default function ProfilePage() {
               </div>
               
               {isEditing && (
-                <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center text-white z-30 opacity-0 group-hover:opacity-100 transition-opacity gap-2">
+                <div className="absolute inset-2 rounded-full bg-black/60 flex items-center justify-center text-white z-40 opacity-0 group-hover:opacity-100 transition-opacity gap-2">
                    <button onClick={() => avatarInputRef.current?.click()} className="p-2 hover:text-white">{uploadingMedia ? <Loader2 size={24} className="animate-spin" /> : <Camera size={24} />}</button>
                    {avatarUrl && <button onClick={() => { setAvatarUrl(''); setAvatarScale(1); setAvatarX(0); setAvatarY(0); setAvatarStart(0); setAvatarEnd(10); }} className="p-2 hover:text-red-400"><Trash2 size={20} /></button>}
                 </div>
@@ -257,12 +271,20 @@ export default function ProfilePage() {
                 <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} maxLength={30} className="text-xl font-black text-white bg-[#1a1a1a] border border-white/10 focus:border-white/30 rounded-lg px-3 py-2 outline-none w-full max-w-sm" />
               </div>
             ) : (
-              <div className="flex items-center gap-1.5 mb-1"><h1 className="text-2xl font-black text-white">{user.name}</h1>{user.isVerified && <BadgeCheck size={20} className="text-blue-500" />}</div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <h1 className={clsx(
+                  "text-2xl font-black",
+                  isOwner ? "bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent" : "text-white"
+                )}>
+                  {user.name}
+                </h1>
+                {user.isVerified && <BadgeCheck size={20} className="text-blue-500" />}
+              </div>
             )}
             <p className="text-sm text-white/50">{user.email}</p>
             
             <div className="flex flex-wrap gap-2 mt-3 mb-4">
-              {user.isVerified && <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-white/5 border border-white/10 text-white text-[10px] font-bold uppercase tracking-wider"><ShieldCheck size={12} /> Terverifikasi</div>}
+              {user.isVerified && <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider"><ShieldCheck size={12} /> Terverifikasi</div>}
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider" style={{ color: roleColor, borderColor: `${roleColor}40`, backgroundColor: `${roleColor}15` }}>{isOwner ? <Crown size={12} /> : <ShieldCheck size={12} />} {user.role || 'user'}</div>
             </div>
 
