@@ -16,11 +16,122 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
-const BioRenderer = ({ html }: { html: string }) => {
-  if (!html) return null;
-  const styledHtml = `<!DOCTYPE html><html><head><style>body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; color: #fff; background: transparent; display: flex; align-items: center; justify-content: center; height: 100%; text-align: center; overflow: hidden; } a { color: #60a5fa; text-decoration: underline; } p { margin: 0; }</style></head><body>${html}</body></html>`;
-  return <iframe srcDoc={styledHtml} sandbox="allow-scripts allow-popups allow-forms" className="w-full h-24 border-0 overflow-hidden" scrolling="no" title="User Bio" />;
-};
+// 🔥 ENGINE BIO DINAMIS (MENDUKUNG BANYAK SVG, ANIMASI CSS, & AUTO-EXPAND KE BAWAH) 🔥
+const BioRenderer = ({ html, uid = 'self' }: { html: string, uid?: string }) => {
+  const [height, setHeight] = useState(72)
+  const channelId = `BIO_RESIZE_${uid}`
+
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data?.type === channelId && typeof e.data.height === 'number') {
+        setHeight(Math.max(56, Math.min(e.data.height, 2500)))
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [channelId])
+
+  if (!html) return null
+
+  const styledHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #ffffff;
+      background: transparent;
+      overflow-x: hidden;
+      overflow-y: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    #bio-wrapper {
+      width: 100%;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 10px;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+    a { color: #38bdf8; text-decoration: none; font-weight: 600; }
+    a:hover { text-decoration: underline; }
+    p { margin: 0; line-height: 1.6; }
+    svg { max-width: 100%; height: auto; overflow: visible; display: block; margin: 0 auto; }
+    img, video { max-width: 100%; height: auto; border-radius: 12px; display: block; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <div id="bio-wrapper">${html}</div>
+  <script>
+    const wrap = document.getElementById('bio-wrapper');
+    const updateHeight = () => {
+      if (!wrap) return;
+      const rect = wrap.getBoundingClientRect();
+      const scrollH = document.documentElement.scrollHeight;
+      const finalH = Math.ceil(Math.max(rect.height, scrollH));
+      window.parent.postMessage({ type: '${channelId}', height: finalH }, '*');
+    };
+    window.addEventListener('load', updateHeight);
+    document.querySelectorAll('img, svg, video').forEach(el => {
+      el.addEventListener('load', updateHeight);
+      el.addEventListener('loadedmetadata', updateHeight);
+    });
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(updateHeight).observe(wrap);
+    }
+    new MutationObserver(updateHeight).observe(wrap, { childList: true, subtree: true, attributes: true, characterData: true });
+    setTimeout(updateHeight, 100);
+    setTimeout(updateHeight, 400);
+    setInterval(updateHeight, 600);
+  </script>
+</body>
+</html>`
+
+  return (
+    <iframe
+      srcDoc={styledHtml}
+      sandbox="allow-scripts allow-popups allow-forms"
+      style={{ height: `${height}px` }}
+      className="w-full border-0 overflow-hidden transition-[height] duration-200 ease-out block"
+      scrolling="no"
+      title="User Bio"
+    />
+  )
+}
+
+// 🔥 PARSER BORDER UNIVERSAL (SVG MENTAH, DATA URI, URL GAMBAR, & CSS GRADIENT) 🔥
+const parseBorderStyle = (raw?: string, isOwner?: boolean) => {
+  const str = (raw || '').trim()
+  if (!str) {
+    return {
+      type: isOwner ? 'gradient' : 'none',
+      value: isOwner ? 'linear-gradient(135deg, #fde047 0%, #f59e0b 50%, #fef08a 100%)' : '#262626'
+    }
+  }
+  if (str.startsWith('<svg')) {
+    return { type: 'url', value: `url("data:image/svg+xml;utf8,${encodeURIComponent(str)}")` }
+  }
+  if (str.includes('url(')) {
+    const match = str.match(/url\((['"]?)(.*?)\1\)/)
+    const cleanUrl = match ? `url("${match[2]}")` : str
+    return { type: 'url', value: cleanUrl }
+  }
+  if (str.includes('gradient')) {
+    return { type: 'gradient', value: str }
+  }
+  return { type: 'color', value: str }
+}
 
 const createCroppedImage = async (imageSrc: string, crop: any) => {
   const image = new Image(); image.src = imageSrc; await new Promise((resolve) => (image.onload = resolve))
@@ -152,19 +263,10 @@ export default function ProfilePage() {
     catch (e) { alert('Gagal') } finally { setGeneratingKey(false) }
   }
 
-  const isOwner = user.role === 'owner'; const roleColor = (user as any).roleColor || (isOwner ? '#f59e0b' : '#ffffff')
+  const isOwner = user.role === 'owner'
+  const roleColor = (user as any).roleColor || (isOwner ? '#f59e0b' : '#ffffff')
   const isMinimalist = user.layoutTheme === 'minimalist'
-  
-  const borderCss = user.borderStyle || ''
-  const isUrl = borderCss.includes('url')
-  const isGradient = borderCss.includes('gradient')
-
-  // Border tipis elegan (emas untuk Owner jika tidak pakai custom gradient/URL)
-  const ringBackground = isGradient 
-    ? borderCss 
-    : isOwner 
-      ? 'linear-gradient(135deg, #fde047 0%, #f59e0b 50%, #fef08a 100%)' 
-      : '#262626'
+  const parsedBorder = parseBorderStyle(user.borderStyle, isOwner)
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8 animate-[fadeIn_0.3s_ease]">
@@ -175,6 +277,7 @@ export default function ProfilePage() {
         {!isMinimalist && (
           <div className="relative aspect-[21/9] w-full bg-[#1a1a1a] overflow-hidden group">
             <div className="absolute inset-0 overflow-hidden"><MediaRenderer src={coverUrl} start={coverStart} end={coverEnd} style={{ transform: `scale(${coverScale}) translate(${coverX}%, ${coverY}%)` }} className="w-full h-full object-cover transition-transform duration-75" /></div>
+            <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent opacity-60 pointer-events-none" />
             {isEditing && (
               <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10 gap-3">
                 <button onClick={() => coverInputRef.current?.click()} className="flex flex-col items-center gap-2 text-white font-bold text-xs uppercase bg-[#1a1a1a] px-5 py-2.5 rounded-lg hover:bg-white/20 border border-white/10">{uploadingMedia ? <Loader2 size={20} className="animate-spin" /> : <><ImageIcon size={20} /> Ganti Background</>}</button>
@@ -188,16 +291,16 @@ export default function ProfilePage() {
         <div className={clsx("px-6 pb-6 relative", isMinimalist && "pt-10")}>
           <div className={clsx("flex justify-between items-end mb-4", !isMinimalist && "-mt-14")}>
             
-            {/* 🔥 AVATAR & BORDER PRESISI (TIPIS & SIMETRIS) 🔥 */}
+            {/* 🔥 AVATAR + BORDER PRESISI SIMETRIS 🔥 */}
             <div className="relative group flex items-center justify-center">
               <div className="relative w-28 h-28 flex items-center justify-center">
                 
-                {/* 1A. JIKA BORDER BERUPA GAMBAR DEKORASI (URL PNG/GIF) */}
-                {isUrl && (
+                {/* 1A. LAYER SVG / IMAGE ANIMASI LUAR */}
+                {parsedBorder.type === 'url' && (
                   <div 
-                    className="absolute -inset-3 rounded-full pointer-events-none z-20"
+                    className="absolute -inset-3.5 rounded-full pointer-events-none z-20"
                     style={{ 
-                      backgroundImage: borderCss,
+                      backgroundImage: parsedBorder.value,
                       backgroundSize: 'contain',
                       backgroundPosition: 'center',
                       backgroundRepeat: 'no-repeat'
@@ -205,22 +308,22 @@ export default function ProfilePage() {
                   />
                 )}
 
-                {/* 1B. CINCIN BORDER TIPIS & FOTO PROFIL */}
+                {/* 1B. LAYER CINCIN TIPIS & FOTO PROFIL */}
                 <div 
                   className={clsx(
                     "relative w-24 h-24 rounded-full p-[2.5px] flex items-center justify-center transition-all duration-300",
-                    (isOwner || isGradient) && "shadow-[0_0_20px_rgba(245,158,11,0.3)]"
+                    (isOwner || parsedBorder.type === 'gradient') && "shadow-[0_0_22px_rgba(245,158,11,0.3)]"
                   )}
-                  style={{ background: !isUrl ? ringBackground : '#121212' }}
+                  style={{ background: parsedBorder.type !== 'url' ? parsedBorder.value : '#121212' }}
                 >
-                  <div className="relative w-full h-full rounded-full bg-[#1a1a1a] overflow-hidden flex items-center justify-center text-white text-3xl font-black z-10 border-[2px] border-[#121212]">
+                  <div className="relative w-full h-full rounded-full bg-[#1a1a1a] overflow-hidden flex items-center justify-center text-white text-3xl font-black z-10 border-[2.5px] border-[#121212]">
                     {avatarUrl ? (
                       <MediaRenderer src={avatarUrl} start={avatarStart} end={avatarEnd} style={{ transform: `scale(${avatarScale}) translate(${avatarX}%, ${avatarY}%)` }} className="w-full h-full object-cover transition-transform duration-75" />
                     ) : user.name.charAt(0).toUpperCase()}
                   </div>
                 </div>
 
-                {/* 2. BADGES (MAHKOTA & VERIFIED PRESISI DI TEPI FOTO) */}
+                {/* 2. BADGES (MAHKOTA & VERIFIED) */}
                 <div className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center">
                   <div className="relative w-24 h-24">
                     {user.isVerified && (
@@ -251,12 +354,12 @@ export default function ProfilePage() {
               {!isEditing ? (
                 <>
                   <Link href={`/user/${user.id}`} className="hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-white transition-all"><ExternalLink size={14} /> Profil Publik</Link>
-                  <button onClick={() => setIsEditing(true)} className="flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-white text-black text-xs font-bold hover:scale-105 active:scale-95 transition-all"><Pencil size={14} /> Edit Profil</button>
+                  <button onClick={() => setIsEditing(true)} className="flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-white text-black text-xs font-bold hover:scale-105 active:scale-95 transition-all shadow-lg"><Pencil size={14} /> Edit Profil</button>
                 </>
               ) : (
                 <>
                   <button onClick={cancelEdit} disabled={saving} className="p-2.5 rounded-full bg-[#1a1a1a] text-white/70 hover:text-white disabled:opacity-50 border border-white/5"><X size={16} /></button>
-                  <button onClick={handleSave} disabled={saving || uploadingMedia} className="flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-white text-black text-xs font-bold hover:scale-105 disabled:opacity-50 transition-all">{saving ? 'Menyimpan...' : <><Check size={14} /> Simpan</>}</button>
+                  <button onClick={handleSave} disabled={saving || uploadingMedia} className="flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-white text-black text-xs font-bold hover:scale-105 disabled:opacity-50 transition-all shadow-lg">{saving ? 'Menyimpan...' : <><Check size={14} /> Simpan</>}</button>
                 </>
               )}
             </div>
@@ -294,15 +397,44 @@ export default function ProfilePage() {
                   <Link href="/tools" className="flex items-center justify-center gap-2 py-3 bg-[#1a1a1a] border border-white/10 rounded-xl hover:bg-white/5 transition-all text-xs font-bold text-white"><Wrench size={16} /> Border Studio</Link>
                   <button onClick={() => setEditLayout(editLayout === 'default' ? 'minimalist' : 'default')} className="flex items-center justify-center gap-2 py-3 bg-[#1a1a1a] border border-white/10 rounded-xl hover:bg-white/5 transition-all text-xs font-bold text-white"><LayoutTemplate size={16} /> Tema: {editLayout === 'default' ? 'Default' : 'Minimalis'}</button>
                 </div>
-                <div className="bg-[#1a1a1a] p-3 rounded-xl border border-white/10">
-                  <div className="flex items-center justify-between mb-2"><label className="text-[10px] text-white/60 font-bold uppercase tracking-wider flex items-center gap-1.5"><Code2 size={12}/> Custom Bio (HTML/CSS/JS)</label></div>
-                  <textarea value={editBio} onChange={(e) => setEditBio(e.target.value)} placeholder='Contoh: <h1 style="color:cyan;">Halo Dunia!</h1>' className="w-full h-24 bg-[#050505] border border-white/10 rounded-lg p-3 text-xs font-mono text-green-400 outline-none focus:border-white/30 resize-none" />
+
+                {/* 🔥 EDITOR BIO BERSIH & PROFESIONAL + LIVE PREVIEW OTOMATIS 🔥 */}
+                <div className="bg-[#1a1a1a] p-4 rounded-2xl border border-white/10 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] text-white/70 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <Code2 size={14} className="text-white/80" /> Custom Bio (HTML / CSS / SVG / JS)
+                    </label>
+                    <span className="text-[10px] text-white/40 font-mono">{editBio.length} karakter</span>
+                  </div>
+
+                  <textarea
+                    value={editBio}
+                    onChange={(e) => setEditBio(e.target.value)}
+                    placeholder="Tulis bio teks biasa, atau masukkan kode HTML, CSS, dan banyak animasi <svg> sekaligus..."
+                    className="w-full min-h-[140px] bg-[#080808] border border-white/10 rounded-xl p-3.5 text-xs font-mono text-emerald-400 outline-none focus:border-white/30 resize-y leading-relaxed"
+                  />
+
+                  {editBio.trim() !== '' && (
+                    <div className="pt-2 space-y-1.5">
+                      <div className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Preview Bio:</div>
+                      <div className="w-full bg-gradient-to-b from-[#161616] to-[#0f0f0f] rounded-2xl border border-white/10 overflow-hidden">
+                        <BioRenderer html={editBio} uid="preview" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
-              <div className="w-full bg-[#1a1a1a] rounded-xl border border-white/5 overflow-hidden">
-                {user.bio ? <BioRenderer html={user.bio} /> : <div className="p-4 text-center text-xs text-white/30 italic">Belum ada bio.</div>}
-              </div>
+              /* 🔥 KOTAK BIO UTAMA (AUTO-HEIGHT MENGIKUTI BANYAKNYA ISI BIO) 🔥 */
+              user.bio ? (
+                <div className="w-full bg-gradient-to-b from-[#181818] to-[#111111] rounded-2xl border border-white/10 overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+                  <BioRenderer html={user.bio} uid={user.id} />
+                </div>
+              ) : (
+                <div className="w-full bg-[#161616] rounded-2xl border border-white/5 p-4 text-center text-xs text-white/30 italic">
+                  Belum ada bio.
+                </div>
+              )
             )}
           </div>
         </div>
@@ -316,7 +448,27 @@ export default function ProfilePage() {
         )}
       </div>
 
-      <div className="mt-8 bg-[#121212] rounded-3xl p-6 border border-white/5">
+      {/* INFO AKUN */}
+      <div className="mt-6 space-y-3">
+        <h3 className="text-[11px] font-black uppercase tracking-widest text-white/40 px-2">Info Akun</h3>
+        <div className="bg-[#121212] rounded-2xl p-4 border border-white/5 flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/60"><Calendar size={18} /></div>
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-white/40">Bergabung Sejak</div>
+            <div className="text-sm font-extrabold text-white">{joinedDate}</div>
+          </div>
+        </div>
+        <div className="bg-[#121212] rounded-2xl p-4 border border-white/5 flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/60"><ShieldCheck size={18} /></div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-white/40">ID Firebase</div>
+            <div className="text-xs font-mono text-white/70 truncate">{user.id}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* DEVELOPER API KEYS */}
+      <div className="mt-6 bg-[#121212] rounded-3xl p-6 border border-white/5">
         <div className="flex items-center gap-2 mb-4"><Key size={18} className="text-white" /><h2 className="text-sm font-black uppercase tracking-wider text-white">Developer API Keys</h2></div>
         <div className="flex gap-2 mb-4">
           <input type="text" placeholder="Nama Aplikasi" value={keyName} onChange={(e) => setKeyName(e.target.value)} className="flex-1 bg-[#1a1a1a] border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-white/30" />

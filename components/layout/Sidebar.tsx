@@ -4,17 +4,18 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  X, Home, Heart, ListMusic, History, BarChart3, Info, Radio, ExternalLink, MessageSquare, UploadCloud, Compass, Clapperboard, Trophy, Wrench
+  X, Home, Heart, ListMusic, History, BarChart3, Info, Radio, ExternalLink, MessageSquare, UploadCloud, Compass, Clapperboard, Trophy, Wrench, Bot
 } from 'lucide-react'
 import { SITE_CONFIG } from '@/lib/constants'
 import { clsx } from 'clsx'
 
 const NAV_ITEMS = [
   { href: '/', icon: Home, label: 'Beranda' },
+  { href: '/ai', icon: Bot, label: 'Omni AI' }, // <-- Menu AI Baru
   { href: '/reels', icon: Clapperboard, label: 'Reels' },
   { href: '/explore', icon: Compass, label: 'Eksplorasi' },
   { href: '/leaderboard', icon: Trophy, label: 'Papan Peringkat' },
-  { href: '/tools', icon: Wrench, label: 'Border Studio' }, // <-- Menu Tools
+  { href: '/tools', icon: Wrench, label: 'Border Studio' },
   { href: '/upload', icon: UploadCloud, label: 'Upload Musik' },
   { href: '/chat', icon: MessageSquare, label: 'Chat Global' },
   { href: '/favorites', icon: Heart, label: 'Favorit' },
