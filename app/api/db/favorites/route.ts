@@ -1,17 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
+import { adminAuth } from '@/lib/firebase-admin'
 
-export const runtime = 'edge' // Pakai Edge biar super cepat
+// ⚠️ Ubah dari 'edge' ke 'nodejs' karena firebase-admin tidak jalan di edge
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+async function getVerifiedUid(req: NextRequest): Promise<string | null> {
+  try {
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return null
+    if (!adminAuth) return null
+    const token = authHeader.split('Bearer ')[1]
+    const decodedToken = await adminAuth.verifyIdToken(token)
+    return decodedToken.uid
+  } catch (error) {
+    return null
+  }
+}
 
 // GET: Ambil semua favorit user
 export async function GET(req: NextRequest) {
-  const uid = req.nextUrl.searchParams.get('uid')
-  if (!uid) return NextResponse.json({ error: 'UID required' }, { status: 400 })
+  const realUid = await getVerifiedUid(req)
+  if (!realUid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    // Pastikan user ada di tabel users, kalau belum insert
-    const userRes = await sql`SELECT id FROM users WHERE firebase_uid = ${uid}`
-    if (userRes.length === 0) return NextResponse.json({ data: [] })
+    const userRes = await sql`SELECT id FROM users WHERE firebase_uid = ${realUid}`
+    if (userRes.length === 0) return NextResponse.json({ success: true, data: [] })
     
     const userId = userRes[0].id
 
@@ -26,25 +41,19 @@ export async function GET(req: NextRequest) {
 
 // POST: Tambah favorit
 export async function POST(req: NextRequest) {
-  const { uid, email, name, song } = await req.json()
-  if (!uid || !song) return NextResponse.json({ error: 'Missing data' }, { status: 400 })
+  const realUid = await getVerifiedUid(req)
+  if (!realUid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // HAPUS uid, email, name dari body!
+  const { song } = await req.json()
+  if (!song) return NextResponse.json({ error: 'Missing data' }, { status: 400 })
 
   try {
-    // 1. Cek/Insert User
-    let userId;
-    const userRes = await sql`SELECT id FROM users WHERE firebase_uid = ${uid}`
-    if (userRes.length === 0) {
-      const newUser = await sql`
-        INSERT INTO users (firebase_uid, email, name) 
-        VALUES (${uid}, ${email}, ${name}) 
-        RETURNING id
-      `
-      userId = newUser[0].id
-    } else {
-      userId = userRes[0].id
-    }
+    const userRes = await sql`SELECT id FROM users WHERE firebase_uid = ${realUid}`
+    if (userRes.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-    // 2. Insert Favorit
+    const userId = userRes[0].id
+
     await sql`
       INSERT INTO favorites (user_id, song_id, song_data)
       VALUES (${userId}, ${song.id}, ${JSON.stringify(song)})
@@ -58,12 +67,15 @@ export async function POST(req: NextRequest) {
 
 // DELETE: Hapus favorit
 export async function DELETE(req: NextRequest) {
-  const uid = req.nextUrl.searchParams.get('uid')
+  const realUid = await getVerifiedUid(req)
+  if (!realUid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // uid dihapus dari URL, hanya ambil songId
   const songId = req.nextUrl.searchParams.get('songId')
-  if (!uid || !songId) return NextResponse.json({ error: 'Missing data' }, { status: 400 })
+  if (!songId) return NextResponse.json({ error: 'Missing data' }, { status: 400 })
 
   try {
-    const userRes = await sql`SELECT id FROM users WHERE firebase_uid = ${uid}`
+    const userRes = await sql`SELECT id FROM users WHERE firebase_uid = ${realUid}`
     if (userRes.length === 0) return NextResponse.json({ success: true })
     
     await sql`

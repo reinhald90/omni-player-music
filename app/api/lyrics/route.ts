@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
 import { parseLRC, plainToSynced } from '@/lib/lyrics'
+import { rateLimit } from '@/lib/rateLimit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -44,6 +45,13 @@ function splitArtistTitle(clean: string, fallbackArtist: string) {
 }
 
 export async function GET(req: NextRequest) {
+  // 🛡️ RATE LIMIT (Maks 40 request per menit per IP)
+  const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown'
+  const isAllowed = rateLimit(ip, 40, 60000)
+  if (!isAllowed) {
+    return NextResponse.json({ success: false, error: 'Terlalu banyak request lirik' }, { status: 429 })
+  }
+
   const rawTitle = req.nextUrl.searchParams.get('title')?.trim() || ''
   const rawArtist = req.nextUrl.searchParams.get('artist')?.trim() || ''
   const duration = Number(req.nextUrl.searchParams.get('duration') || 0)
@@ -80,7 +88,7 @@ export async function GET(req: NextRequest) {
             data: {
               source: 'synced',
               lyrics: parseLRC(data.syncedLyrics),
-              lyricsDuration: data.duration || 0, // ← durasi versi lrclib
+              lyricsDuration: data.duration || 0,
             },
           })
         }
@@ -130,13 +138,11 @@ export async function GET(req: NextRequest) {
           if (rA === aL) score += 30
           else if (rA.includes(aL) || aL.includes(rA)) score += 15
 
-          // Prefer hasil dengan durasi dekat
           if (duration > 0 && res.duration) {
             const diff = Math.abs(res.duration - duration)
             if (diff < 3) score += 25
             else if (diff < 10) score += 15
             else if (diff < 30) score += 5
-            // Kalau beda jauh (>60s), kasih penalti
             else if (diff > 60) score -= 10
           }
 
@@ -159,7 +165,7 @@ export async function GET(req: NextRequest) {
             data: {
               source: 'synced',
               lyrics: parseLRC(res.syncedLyrics),
-              lyricsDuration: res.duration || 0, // ← durasi versi lrclib
+              lyricsDuration: res.duration || 0,
             },
           })
         }

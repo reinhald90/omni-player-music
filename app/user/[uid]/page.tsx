@@ -7,9 +7,10 @@ import Image from 'next/image'
 import { useAuthStore } from '@/store/authStore'
 import { usePlayerStore } from '@/store/playerStore'
 import { useHistoryStore } from '@/store/historyStore'
-import { BadgeCheck, ArrowLeft, Play, Music2, Loader2, Calendar, ShieldCheck, Crown, Share2, Pencil, Check } from 'lucide-react'
+import { BadgeCheck, ArrowLeft, Play, Music2, Loader2, Calendar, ShieldCheck, Crown, Share2, Pencil, Check, Hash, AtSign } from 'lucide-react'
 import type { Song } from '@/types'
 import { clsx } from 'clsx'
+import DOMPurify from 'isomorphic-dompurify'
 
 const BioRenderer = ({ html, uid = 'pub' }: { html: string, uid?: string }) => {
   const [height, setHeight] = useState(72)
@@ -26,6 +27,13 @@ const BioRenderer = ({ html, uid = 'pub' }: { html: string, uid?: string }) => {
   }, [channelId])
 
   if (!html) return null
+
+  // 🛡️ SANITIZE HTML (Mencegah Stored XSS)
+  const cleanHtml = DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true, svg: true, svgFilters: true },
+    ADD_TAGS: ['style', 'link', 'iframe'],
+    ADD_ATTR: ['target', 'allow', 'allowfullscreen', 'frameborder', 'scrolling']
+  })
 
   const styledHtml = `<!DOCTYPE html>
 <html>
@@ -54,7 +62,7 @@ const BioRenderer = ({ html, uid = 'pub' }: { html: string, uid?: string }) => {
   </style>
 </head>
 <body>
-  <div id="bio-wrapper">${html}</div>
+  <div id="bio-wrapper">${cleanHtml}</div>
   <script>
     const wrap = document.getElementById('bio-wrapper');
     const updateHeight = () => {
@@ -145,7 +153,7 @@ const MediaRenderer = ({ src, style, className, start = 0, end = 10 }: { src: st
 }
 
 interface UserProfile { 
-  id: string; name: string; email: string; avatar: string | null; coverUrl: string | null; bio: string | null; 
+  id: string; idNumber?: number; username?: string; name: string; email: string; avatar: string | null; coverUrl: string | null; bio: string | null; 
   borderStyle?: string; layoutTheme?: string;
   avatarScale?: number; avatarX?: number; avatarY?: number; avatarStart?: number; avatarEnd?: number; 
   coverScale?: number; coverX?: number; coverY?: number; coverStart?: number; coverEnd?: number; 
@@ -158,10 +166,11 @@ export default function PublicProfilePage() {
   const rawUid = Array.isArray(params?.uid) ? params.uid[0] : params?.uid
   const uid = rawUid ? decodeURIComponent(rawUid) : ''
 
-  const authUser = useAuthStore((s) => s.user)
+  const authUser = useAuthStore((s) => s.user) as any
   const [data, setData] = useState<{ user: UserProfile, songs: CommunitySong[] } | null>(null)
   const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [showId, setShowId] = useState(false) // 🛡️ State untuk sembunyikan ID
   const setCurrent = usePlayerStore((s) => s.setCurrent); const current = usePlayerStore((s) => s.current); const addHistory = useHistoryStore((s) => s.add)
 
   useEffect(() => {
@@ -204,6 +213,8 @@ export default function PublicProfilePage() {
         ...dbUser,
         name: authUser?.name || dbUser.name,
         bio: authUser?.bio ?? dbUser.bio,
+        username: authUser?.username ?? dbUser.username,
+        idNumber: authUser?.idNumber ?? dbUser.idNumber,
         avatar: authUser?.avatar || dbUser.avatar,
         coverUrl: authUser?.coverUrl || dbUser.coverUrl,
         borderStyle: authUser?.borderStyle || dbUser.borderStyle,
@@ -258,7 +269,6 @@ export default function PublicProfilePage() {
         <div className={clsx("px-6 pb-6 relative", isMinimalist && "pt-10")}>
           <div className={clsx("flex justify-between items-end mb-4", !isMinimalist && "-mt-14")}>
             
-            {/* AVATAR + BORDER RENDERER */}
             <div className="relative flex items-center justify-center">
               <div className="relative w-28 h-28 flex items-center justify-center">
                 
@@ -331,7 +341,7 @@ export default function PublicProfilePage() {
           </div>
 
           <div>
-            <div className="flex items-center gap-1.5 mb-1">
+            <div className="flex items-center gap-1.5 mb-0.5">
               <h1 className={clsx(
                 "text-2xl font-black",
                 isOwner ? "bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent" : "text-white"
@@ -340,7 +350,10 @@ export default function PublicProfilePage() {
               </h1>
               {user.isVerified && <BadgeCheck size={20} className="text-blue-500" />}
             </div>
-            <p className="text-sm text-white/50">{user.email}</p>
+            <div className="flex items-center gap-2 text-xs text-white/50 mb-1">
+              {user.username && <span className="text-sky-400 font-mono">@{user.username}</span>}
+            </div>
+            <p className="text-xs text-white/40">{user.email}</p>
             
             <div className="flex flex-wrap gap-2 mt-3 mb-4">
               {user.isVerified && <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider"><ShieldCheck size={12} /> Terverifikasi</div>}
@@ -370,18 +383,35 @@ export default function PublicProfilePage() {
 
       <div className="mt-6 space-y-3">
         <h3 className="text-[11px] font-black uppercase tracking-widest text-white/40 px-2">Info Akun</h3>
+        <div className="bg-[#121212] rounded-2xl p-4 border border-white/5 flex items-center justify-between">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/60"><Hash size={18} /></div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-white/40">ID Pengguna</div>
+              <div className="text-sm font-extrabold font-mono text-white flex items-center gap-2">
+                <span>{showId ? `#${user.idNumber || '---'}` : '••••••••'}</span>
+                <button
+                  type="button"
+                  onClick={() => setShowId((v) => !v)}
+                  className="text-[10px] font-bold uppercase tracking-wider text-sky-400 hover:text-sky-300 transition-colors"
+                >
+                  {showId ? 'Sembunyikan' : 'Lihat'}
+                </button>
+              </div>
+            </div>
+          </div>
+          {user.username && (
+            <div className="text-right">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-white/40">Username</div>
+              <div className="text-sm font-extrabold font-mono text-sky-400">@{user.username}</div>
+            </div>
+          )}
+        </div>
         <div className="bg-[#121212] rounded-2xl p-4 border border-white/5 flex items-center gap-3.5">
           <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/60"><Calendar size={18} /></div>
           <div>
             <div className="text-[10px] font-bold uppercase tracking-wider text-white/40">Bergabung Sejak</div>
             <div className="text-sm font-extrabold text-white">{joinedDate}</div>
-          </div>
-        </div>
-        <div className="bg-[#121212] rounded-2xl p-4 border border-white/5 flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/60"><ShieldCheck size={18} /></div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-white/40">ID Firebase</div>
-            <div className="text-xs font-mono text-white/70 truncate">{user.id}</div>
           </div>
         </div>
       </div>

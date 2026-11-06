@@ -8,11 +8,13 @@ import { useAuthStore } from '@/store/authStore'
 import { useFavoritesStore } from '@/store/favoritesStore'
 import { usePlaylistStore } from '@/store/playlistStore'
 import { useHistoryStore } from '@/store/historyStore'
+import { auth } from '@/lib/firebase'
+import DOMPurify from 'isomorphic-dompurify' // 🛡️ Import Sanitizer
 import { 
   BadgeCheck, LogOut, Calendar, ShieldCheck, Camera, Pencil, X, Check, 
   Image as ImageIcon, AlertCircle, Key, Copy, Plus, Eye, EyeOff, Loader2,
   Crown, ExternalLink, Heart, ListMusic, Clock, Trash2, ZoomIn, Scissors, Code2,
-  Wrench, LayoutTemplate
+  Wrench, LayoutTemplate, AtSign, Hash
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -31,6 +33,13 @@ const BioRenderer = ({ html, uid = 'self' }: { html: string, uid?: string }) => 
   }, [channelId])
 
   if (!html) return null
+
+  // 🛡️ SANITIZE HTML (Mencegah Stored XSS)
+  const cleanHtml = DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true, svg: true, svgFilters: true },
+    ADD_TAGS: ['style', 'link', 'iframe'],
+    ADD_ATTR: ['target', 'allow', 'allowfullscreen', 'frameborder', 'scrolling']
+  })
 
   const styledHtml = `<!DOCTYPE html>
 <html>
@@ -59,7 +68,7 @@ const BioRenderer = ({ html, uid = 'self' }: { html: string, uid?: string }) => 
   </style>
 </head>
 <body>
-  <div id="bio-wrapper">${html}</div>
+  <div id="bio-wrapper">${cleanHtml}</div>
   <script>
     const wrap = document.getElementById('bio-wrapper');
     const updateHeight = () => {
@@ -192,6 +201,7 @@ export default function ProfilePage() {
 
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState(''); const [editBio, setEditBio] = useState('')
+  const [editUsername, setEditUsername] = useState('')
   const [editLayout, setEditLayout] = useState('default')
   const [saving, setSaving] = useState(false); const [errorMsg, setErrorMsg] = useState<string | null>(null); const [uploadingMedia, setUploadingMedia] = useState(false)
 
@@ -207,13 +217,25 @@ export default function ProfilePage() {
     if (initialized && !isAuthenticated) router.push('/')
     if (user) {
       setEditName(user.name || ''); setEditBio(user.bio || ''); setAvatarUrl(user.avatar || '')
+      setEditUsername(user.username || '')
       setEditLayout(user.layoutTheme || 'default')
       setAvatarScale(user.avatarScale || 1); setAvatarX(user.avatarX || 0); setAvatarY(user.avatarY || 0); setAvatarStart(user.avatarStart || 0); setAvatarEnd(user.avatarEnd || 10)
       setCoverUrl(user.coverUrl || ''); setCoverScale(user.coverScale || 1); setCoverX(user.coverX || 0); setCoverY(user.coverY || 0); setCoverStart(user.coverStart || 0); setCoverEnd(user.coverEnd || 10)
     }
   }, [initialized, isAuthenticated, router, user])
 
-  const fetchApiKeys = async () => { if (!user) return; try { const res = await fetch(`/api/db/apikey?uid=${user.id}`); const json = await res.json(); if (json.success) setApiKeys(json.data) } catch (e) {} }
+  const fetchApiKeys = async () => { 
+    if (!user) return; 
+    try { 
+      const token = await auth.currentUser?.getIdToken()
+      const res = await fetch(`/api/db/apikey`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      }); 
+      const json = await res.json(); 
+      if (json.success) setApiKeys(json.data) 
+    } catch (e) {} 
+  }
+  
   useEffect(() => { if (user) fetchApiKeys() }, [user])
 
   if (!initialized || !user) return <div className="min-h-[60vh] flex items-center justify-center"><div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" /></div>
@@ -232,7 +254,20 @@ export default function ProfilePage() {
 
   const uploadMedia = async (file: File, type: 'avatar' | 'cover') => {
     setUploadingMedia(true); setErrorMsg(null)
-    try { const formData = new FormData(); formData.append('file', file); formData.append('type', type); const res = await fetch('/api/upload', { method: 'POST', body: formData }); const json = await res.json(); if (json.success) setCropModal({ type, src: json.url }); else setErrorMsg(json.error || 'Gagal upload') } 
+    try { 
+      const token = await auth.currentUser?.getIdToken()
+      const formData = new FormData(); 
+      formData.append('file', file); 
+      formData.append('type', type); 
+      
+      const res = await fetch('/api/upload', { 
+        method: 'POST', 
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData 
+      }); 
+      const json = await res.json(); 
+      if (json.success) setCropModal({ type, src: json.url }); else setErrorMsg(json.error || 'Gagal upload') 
+    } 
     catch (err) { setErrorMsg('Error upload') } finally { setUploadingMedia(false); if (avatarInputRef.current) avatarInputRef.current.value = ''; if (coverInputRef.current) coverInputRef.current.value = '' }
   }
 
@@ -250,6 +285,7 @@ export default function ProfilePage() {
       await updateProfileData({ 
         name: editName, 
         bio: editBio, 
+        username: editUsername.trim() || undefined,
         avatar: avatarUrl, 
         coverUrl: coverUrl, 
         layoutTheme: editLayout, 
@@ -264,6 +300,7 @@ export default function ProfilePage() {
   const cancelEdit = () => {
     setIsEditing(false); setErrorMsg(null)
     setEditName(user.name || ''); setEditBio(user.bio || ''); setAvatarUrl(user.avatar || ''); setCoverUrl(user.coverUrl || '')
+    setEditUsername(user.username || '')
     setEditLayout(user.layoutTheme || 'default')
     setAvatarScale(user.avatarScale || 1); setAvatarX(user.avatarX || 0); setAvatarY(user.avatarY || 0); setAvatarStart(user.avatarStart || 0); setAvatarEnd(user.avatarEnd || 10)
     setCoverScale(user.coverScale || 1); setCoverX(user.coverX || 0); setCoverY(user.coverY || 0); setCoverStart(user.coverStart || 0); setCoverEnd(user.coverEnd || 10)
@@ -271,7 +308,19 @@ export default function ProfilePage() {
 
   const generateApiKey = async () => {
     if (!user) return; setGeneratingKey(true)
-    try { const res = await fetch('/api/db/apikey', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid: user.id, name: keyName || 'My App' }) }); const json = await res.json(); if (json.success) { setKeyName(''); fetchApiKeys() } else alert(json.error) } 
+    try { 
+      const token = await auth.currentUser?.getIdToken()
+      const res = await fetch('/api/db/apikey', { 
+        method: 'POST', 
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}) 
+        }, 
+        body: JSON.stringify({ name: keyName || 'My App' }) 
+      }); 
+      const json = await res.json(); 
+      if (json.success) { setKeyName(''); fetchApiKeys() } else alert(json.error) 
+    } 
     catch (e) { alert('Gagal') } finally { setGeneratingKey(false) }
   }
 
@@ -279,6 +328,8 @@ export default function ProfilePage() {
   const roleColor = (user as any).roleColor || (isOwner ? '#f59e0b' : '#ffffff')
   const isMinimalist = (isEditing ? editLayout : user.layoutTheme) === 'minimalist'
   const borderInfo = resolveUserBorder(user.borderStyle, isOwner, user.isVerified)
+  
+  const publicIdentifier = user.username || user.idNumber || user.id
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8 animate-[fadeIn_0.3s_ease]">
@@ -311,7 +362,6 @@ export default function ProfilePage() {
         <div className={clsx("px-6 pb-6 relative", isMinimalist && "pt-10")}>
           <div className={clsx("flex justify-between items-end mb-4", !isMinimalist && "-mt-14")}>
             
-            {/* AVATAR + BORDER */}
             <div className="relative group flex items-center justify-center">
               <div className="relative w-28 h-28 flex items-center justify-center">
                 
@@ -381,7 +431,7 @@ export default function ProfilePage() {
             <div className="mb-2 flex items-center gap-2">
               {!isEditing ? (
                 <>
-                  <Link href={`/user/${user.id}`} className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-white transition-all" title="Lihat Profil Publik">
+                  <Link href={`/user/${publicIdentifier}`} className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-white transition-all" title="Lihat Profil Publik">
                     <ExternalLink size={14} /> <span className="hidden sm:inline">Profil Publik</span>
                   </Link>
                   <button onClick={() => setIsEditing(true)} className="flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-white text-black text-xs font-bold hover:scale-105 active:scale-95 transition-all shadow-lg">
@@ -401,22 +451,37 @@ export default function ProfilePage() {
 
           <div>
             {isEditing ? (
-              <div className="mb-2">
-                <label className="text-[10px] text-white/40 font-bold uppercase tracking-wider mb-1 block">Nama Tampilan</label>
-                <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} maxLength={30} className="text-xl font-black text-white bg-[#1a1a1a] border border-white/10 focus:border-white/30 rounded-lg px-3 py-2 outline-none w-full max-w-sm" />
+              <div className="space-y-3 mb-3">
+                <div>
+                  <label className="text-[10px] text-white/40 font-bold uppercase tracking-wider mb-1 block">Nama Tampilan</label>
+                  <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} maxLength={30} className="text-sm font-bold text-white bg-[#1a1a1a] border border-white/10 focus:border-white/30 rounded-lg px-3 py-2 outline-none w-full max-w-sm" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-white/40 font-bold uppercase tracking-wider mb-1 block">Username Kustom (@username)</label>
+                  <div className="flex items-center bg-[#1a1a1a] border border-white/10 rounded-lg px-3 py-2 max-w-sm">
+                    <AtSign size={14} className="text-white/40 mr-1.5" />
+                    <input type="text" value={editUsername} onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))} placeholder="username" maxLength={20} className="text-sm font-mono text-white bg-transparent outline-none w-full" />
+                  </div>
+                </div>
               </div>
             ) : (
-              <div className="flex items-center gap-1.5 mb-1">
-                <h1 className={clsx(
-                  "text-2xl font-black",
-                  isOwner ? "bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent" : "text-white"
-                )}>
-                  {user.name}
-                </h1>
-                {user.isVerified && <BadgeCheck size={20} className="text-blue-500" />}
+              <div>
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <h1 className={clsx(
+                    "text-2xl font-black",
+                    isOwner ? "bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent" : "text-white"
+                  )}>
+                    {user.name}
+                  </h1>
+                  {user.isVerified && <BadgeCheck size={20} className="text-blue-500" />}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-white/50 mb-1">
+                  {user.username && <span className="text-sky-400 font-mono">@{user.username}</span>}
+                  {user.idNumber && <span className="flex items-center gap-0.5 text-white/40 font-mono"><Hash size={12} />{user.idNumber}</span>}
+                </div>
               </div>
             )}
-            <p className="text-sm text-white/50">{user.email}</p>
+            <p className="text-xs text-white/40">{user.email}</p>
             
             <div className="flex flex-wrap gap-2 mt-3 mb-4">
               {user.isVerified && <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider"><ShieldCheck size={12} /> Terverifikasi</div>}
@@ -480,18 +545,26 @@ export default function ProfilePage() {
 
       <div className="mt-6 space-y-3">
         <h3 className="text-[11px] font-black uppercase tracking-widest text-white/40 px-2">Info Akun</h3>
+        <div className="bg-[#121212] rounded-2xl p-4 border border-white/5 flex items-center justify-between">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/60"><Hash size={18} /></div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-white/40">ID Number</div>
+              <div className="text-sm font-extrabold font-mono text-white">#{user.idNumber || '---'}</div>
+            </div>
+          </div>
+          {user.username && (
+            <div className="text-right">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-white/40">Username</div>
+              <div className="text-sm font-extrabold font-mono text-sky-400">@{user.username}</div>
+            </div>
+          )}
+        </div>
         <div className="bg-[#121212] rounded-2xl p-4 border border-white/5 flex items-center gap-3.5">
           <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/60"><Calendar size={18} /></div>
           <div>
             <div className="text-[10px] font-bold uppercase tracking-wider text-white/40">Bergabung Sejak</div>
             <div className="text-sm font-extrabold text-white">{joinedDate}</div>
-          </div>
-        </div>
-        <div className="bg-[#121212] rounded-2xl p-4 border border-white/5 flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/60"><ShieldCheck size={18} /></div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-white/40">ID Firebase</div>
-            <div className="text-xs font-mono text-white/70 truncate">{user.id}</div>
           </div>
         </div>
       </div>

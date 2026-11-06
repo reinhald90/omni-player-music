@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Song } from '@/types'
 import { useAuthStore } from './authStore'
+import { auth } from '@/lib/firebase'
 
 interface FavoritesState {
   items: Song[]
@@ -25,11 +26,16 @@ export const useFavoritesStore = create<FavoritesState>()(
         
         const user = useAuthStore.getState().user
         if (user) {
-          fetch('/api/db/favorites', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: user.id, email: user.email, name: user.name, song })
-          })
+          auth.currentUser?.getIdToken().then(token => {
+            fetch('/api/db/favorites', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify({ song }) // uid, email, name dihapus
+            })
+          }).catch(console.error)
         }
       },
 
@@ -38,7 +44,13 @@ export const useFavoritesStore = create<FavoritesState>()(
         
         const user = useAuthStore.getState().user
         if (user) {
-          fetch(`/api/db/favorites?uid=${user.id}&songId=${id}`, { method: 'DELETE' })
+          auth.currentUser?.getIdToken().then(token => {
+            // uid dihapus dari URL
+            fetch(`/api/db/favorites?songId=${id}`, { 
+              method: 'DELETE',
+              headers: token ? { Authorization: `Bearer ${token}` } : {}
+            })
+          }).catch(console.error)
         }
       },
 
@@ -50,20 +62,23 @@ export const useFavoritesStore = create<FavoritesState>()(
 
       isFavorite: (id) => get().items.some((s) => s.id === id),
       
-      clear: () => set({ items: [] }), // <-- Ini yang dipanggil saat logout
+      clear: () => set({ items: [] }),
       
       syncFromDb: async () => {
         const user = useAuthStore.getState().user
         if (!user) return
         
-        // Kosongkan dulu sementara (mencegah data user lama nyangkut)
         set({ items: [] })
         
         try {
-          const res = await fetch(`/api/db/favorites?uid=${user.id}`)
+          const token = await auth.currentUser?.getIdToken()
+          // uid dihapus dari URL
+          const res = await fetch(`/api/db/favorites`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
           const json = await res.json()
           if (json.success) {
-            set({ items: json.data }) // Timpa dengan data dari server
+            set({ items: json.data })
           }
         } catch (e) { console.error(e) }
       }

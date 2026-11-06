@@ -11,24 +11,43 @@ export async function GET(
 ) {
   try {
     const resolvedParams = await Promise.resolve(context.params)
-    const uid = resolvedParams.uid
+    const identifier = resolvedParams.uid?.trim()
 
-    if (!uid) {
-      return NextResponse.json({ success: false, error: 'UID tidak valid' }, { status: 400 })
+    if (!identifier) {
+      return NextResponse.json({ success: false, error: 'Identifier tidak valid' }, { status: 400 })
     }
 
-    const userRes = await sql`
-      SELECT firebase_uid, name, email, avatar_url, cover_url, bio, is_verified, role, role_color, created_at, border_style, layout_theme,
-             avatar_scale, avatar_x, avatar_y, avatar_start_time, avatar_end_time,
-             cover_scale, cover_x, cover_y, cover_start_time, cover_end_time
-      FROM users WHERE firebase_uid = ${uid}
-    `
+    // Cek apakah identifier berupa angka (id_number) atau string (username / firebase_uid)
+    const isNumeric = /^\d+$/.test(identifier)
+
+    let userRes
+    if (isNumeric) {
+      const numericId = parseInt(identifier, 10)
+      userRes = await sql`
+        SELECT firebase_uid, id_number, username, name, email, avatar_url, cover_url, bio, is_verified, role, role_color, created_at, border_style, layout_theme,
+               avatar_scale, avatar_x, avatar_y, avatar_start_time, avatar_end_time,
+               cover_scale, cover_x, cover_y, cover_start_time, cover_end_time
+        FROM users WHERE id_number = ${numericId}
+      `
+    } else {
+      // Cari berdasarkan username atau firebase_uid
+      userRes = await sql`
+        SELECT firebase_uid, id_number, username, name, email, avatar_url, cover_url, bio, is_verified, role, role_color, created_at, border_style, layout_theme,
+               avatar_scale, avatar_x, avatar_y, avatar_start_time, avatar_end_time,
+               cover_scale, cover_x, cover_y, cover_start_time, cover_end_time
+        FROM users WHERE username ILIKE ${identifier} OR firebase_uid = ${identifier}
+      `
+    }
+
     if (userRes.length === 0) {
       return NextResponse.json({ success: false, error: 'User tidak ditemukan' }, { status: 404 })
     }
 
     const user = userRes[0]
-    const songsRes = await sql`SELECT * FROM community_songs WHERE user_id = ${uid} ORDER BY created_at DESC`
+    const targetFirebaseUid = user.firebase_uid
+
+    // Ambil lagu komunitas berdasarkan firebase_uid user tersebut
+    const songsRes = await sql`SELECT * FROM community_songs WHERE user_id = ${targetFirebaseUid} ORDER BY created_at DESC`
 
     return NextResponse.json(
       { 
@@ -36,8 +55,10 @@ export async function GET(
         data: {
           user: {
             id: user.firebase_uid,
+            idNumber: user.id_number || null,
+            username: user.username || null,
             name: user.name || 'User',
-            email: user.email || '',
+            email: user.email || '', // Sembunyikan jika ingin privasi publik total
             avatar: user.avatar_url || null,
             coverUrl: user.cover_url || null,
             bio: user.bio || '',

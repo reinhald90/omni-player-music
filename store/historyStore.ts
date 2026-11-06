@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { HistoryItem, Song } from '@/types'
 import { useAuthStore } from './authStore'
+import { auth } from '@/lib/firebase'
 
 interface HistoryState {
   items: HistoryItem[]
@@ -19,18 +20,20 @@ export const useHistoryStore = create<HistoryState>()(
       add: (song) => {
         const filtered = get().items.filter((i) => i.id !== song.id)
         const newItem: HistoryItem = { ...song, playedAt: Date.now() }
-
-        // 1. Simpan ke LocalStorage (Langsung muncul di UI)
         set({ items: [newItem, ...filtered].slice(0, 100) })
 
-        // 2. Kirim ke Database di belakang layar (Background)
         const user = useAuthStore.getState().user
         if (user) {
-          fetch('/api/db/history', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: user.id, email: user.email, name: user.name, song })
-          }).catch(err => console.error('Gagal sync history ke DB:', err))
+          auth.currentUser?.getIdToken().then(token => {
+            fetch('/api/db/history', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify({ song }) // uid, email, name dihapus
+            }).catch(err => console.error('Gagal sync history ke DB:', err))
+          }).catch(console.error)
         }
       },
 
@@ -45,10 +48,13 @@ export const useHistoryStore = create<HistoryState>()(
         if (!user) return
 
         try {
-          const res = await fetch(`/api/db/history?uid=${user.id}`)
+          const token = await auth.currentUser?.getIdToken()
+          // uid dihapus dari URL
+          const res = await fetch(`/api/db/history`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
           const json = await res.json()
 
-          // Hanya timpa LocalStorage KALAU data dari DB ada isinya
           if (json.success && json.data && json.data.length > 0) {
             set({ items: json.data })
           }

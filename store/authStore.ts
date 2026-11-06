@@ -11,22 +11,64 @@ import { usePlaylistStore } from './playlistStore'
 import { useHistoryStore } from './historyStore'
 
 export interface User {
-  id: string; name: string; email: string; avatar?: string; coverUrl?: string;
-  avatarScale?: number; avatarX?: number; avatarY?: number; avatarStart?: number; avatarEnd?: number;
-  coverScale?: number; coverX?: number; coverY?: number; coverStart?: number; coverEnd?: number;
-  bio?: string; borderStyle?: string; layoutTheme?: string; joinedAt?: number; role?: string; roleColor?: string; isVerified?: boolean;
+  id: string;
+  idNumber?: number | null;
+  username?: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  coverUrl?: string;
+  avatarScale?: number;
+  avatarX?: number;
+  avatarY?: number;
+  avatarStart?: number;
+  avatarEnd?: number;
+  coverScale?: number;
+  coverX?: number;
+  coverY?: number;
+  coverStart?: number;
+  coverEnd?: number;
+  bio?: string;
+  borderStyle?: string;
+  layoutTheme?: string;
+  joinedAt?: number;
+  role?: string;
+  roleColor?: string;
+  isVerified?: boolean;
 }
 
 interface AuthState {
-  user: User | null; isAuthenticated: boolean; loading: boolean; initialized: boolean; error: string | null;
-  initAuth: () => void; loginEmail: (email: string, password: string) => Promise<void>;
+  user: User | null;
+  isAuthenticated: boolean;
+  loading: boolean;
+  initialized: boolean;
+  error: string | null;
+  initAuth: () => void;
+  loginEmail: (email: string, password: string) => Promise<void>;
   registerEmail: (name: string, email: string, password: string) => Promise<void>;
-  loginGoogle: () => Promise<void>; logout: () => Promise<void>; clearError: () => void;
-  refreshUserStatus: () => Promise<void>; updateProfileData: (data: Partial<User>) => Promise<void>;
+  loginGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
+  clearError: () => void;
+  refreshUserStatus: () => Promise<void>;
+  updateProfileData: (data: Partial<User>) => Promise<void>;
+}
+
+// Helper untuk mengambil Bearer Token Firebase
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  try {
+    const token = await auth.currentUser?.getIdToken()
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  } catch {
+    return {}
+  }
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  user: null, isAuthenticated: false, loading: false, initialized: false, error: null,
+  user: null,
+  isAuthenticated: false,
+  loading: false,
+  initialized: false,
+  error: null,
 
   clearError: () => set({ error: null }),
 
@@ -34,16 +76,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const currentUser = get().user
     if (!currentUser) return
     try {
-      // 1. Ambil dulu data asli dari database (jangan ditimpa POST dulu)
-      const res = await fetch(`/api/db/profile?uid=${currentUser.id}&t=${Date.now()}`, { cache: 'no-store' })
+      const authHeaders = await getAuthHeaders()
+
+      // 1. Ambil data profil (TANPA mengirim uid di URL)
+      const res = await fetch(`/api/db/profile?t=${Date.now()}`, { 
+        cache: 'no-store',
+        headers: authHeaders
+      })
       const json = await res.json()
 
-      if (json.success && json.name) {
+      if (json.success && (json.exists !== false) && json.name) {
         const dbData = json.data || json
         set({ 
           user: { 
             ...currentUser,
+            idNumber: dbData.id_number ?? dbData.idNumber ?? currentUser.idNumber ?? null,
+            username: dbData.username ?? currentUser.username ?? '',
             name: dbData.name ?? currentUser.name,
+            email: dbData.email ?? currentUser.email,
             avatar: dbData.avatar_url ?? dbData.avatar ?? currentUser.avatar,
             role: dbData.role ?? currentUser.role,
             roleColor: dbData.role_color ?? dbData.roleColor ?? currentUser.roleColor,
@@ -62,20 +112,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             coverY: Number(dbData.cover_y ?? dbData.coverY ?? 0),
             coverStart: Number(dbData.cover_start_time ?? dbData.coverStart ?? 0),
             coverEnd: Number(dbData.cover_end_time ?? dbData.coverEnd ?? 10),
+            joinedAt: dbData.joined_at ?? currentUser.joinedAt,
           } 
         })
       } else {
-        // 2. Jika user baru dan belum ada di DB, baru daftarkan via POST
+        // 2. Jika user baru dan belum ada di DB, daftarkan via POST (TANPA uid di body)
         await fetch('/api/db/profile', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
           body: JSON.stringify({
-            uid: currentUser.id,
             name: currentUser.name,
             email: currentUser.email,
             avatar_url: currentUser.avatar || ''
           })
         })
+
+        // Ambil ulang agar idNumber yang baru di-generate langsung muncul di UI
+        const retryRes = await fetch(`/api/db/profile?t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: authHeaders
+        })
+        const retryJson = await retryRes.json()
+        if (retryJson.success) {
+          set({
+            user: {
+              ...currentUser,
+              idNumber: retryJson.id_number ?? retryJson.idNumber ?? null,
+              username: retryJson.username ?? '',
+              role: retryJson.role ?? 'user',
+              isVerified: Boolean(retryJson.is_verified),
+            }
+          })
+        }
       }
     } catch (e) {
       console.error('Error refreshUserStatus:', e)
@@ -86,12 +154,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const currentUser = get().user
     if (!currentUser) return
     try {
-      // 🔥 GABUNGKAN STATE LAMA & BARU AGAR TIDAK ADA FIELD YANG TERTIMPA UNDEFINED/NULL 🔥
+      const authHeaders = await getAuthHeaders()
       const merged: User = { ...currentUser, ...data }
 
+      const cleanUsername = merged.username
+        ? String(merged.username).toLowerCase().replace(/[^a-z0-9_]/g, '')
+        : undefined
+
+      // PAYLOAD DIBERSIHKAN: Tidak ada lagi 'uid' di sini. 
+      // Backend akan mengambil UID dari Bearer Token.
       const payload = { 
-        uid: merged.id,
         name: merged.name || 'User',
+        username: cleanUsername,
         email: merged.email || '',
         avatar_url: merged.avatar ?? '',
         cover_url: merged.coverUrl ?? '',
@@ -112,17 +186,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       const res = await fetch('/api/db/profile', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify(payload)
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Gagal update database')
+      if (!res.ok || json.success === false) {
+        throw new Error(json.error || 'Gagal update database')
+      }
 
       if (auth.currentUser && data.name) {
         await updateProfile(auth.currentUser, { displayName: data.name })
       }
 
-      set({ user: merged })
+      set({ user: { ...merged, username: cleanUsername ?? merged.username } })
     } catch (e) {
       console.error('Gagal update profil:', e)
       throw e
@@ -163,6 +239,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try { await signInWithPopup(auth, googleProvider) } catch (err: any) { set({ error: err.message.replace('Firebase: ', '') }); throw err } finally { set({ loading: false }) }
   },
   logout: async () => {
-    await signOut(auth); useFavoritesStore.getState().clear(); usePlaylistStore.getState().clear(); useHistoryStore.getState().clear(); set({ user: null, isAuthenticated: false })
+    await signOut(auth)
+    useFavoritesStore.getState().clear()
+    usePlaylistStore.getState().clear()
+    useHistoryStore.getState().clear()
+    set({ user: null, isAuthenticated: false })
   }
 }))

@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Song } from '@/types'
 import { useAuthStore } from './authStore'
+import { auth } from '@/lib/firebase'
 
 export interface Playlist {
   id: string
@@ -44,11 +45,16 @@ export const usePlaylistStore = create<PlaylistState>()(
         
         const user = useAuthStore.getState().user
         if (user) {
-          fetch('/api/db/playlists', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: user.id, email: user.email, name: user.name, action: 'create', payload: { name, description } })
-          })
+          auth.currentUser?.getIdToken().then(token => {
+            fetch('/api/db/playlists', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify({ action: 'create', payload: { name, description } }) // uid dihapus
+            })
+          }).catch(console.error)
         }
         return id
       },
@@ -57,11 +63,16 @@ export const usePlaylistStore = create<PlaylistState>()(
         set({ playlists: get().playlists.filter((p) => p.id !== id) })
         const user = useAuthStore.getState().user
         if (user) {
-          fetch('/api/db/playlists', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: user.id, email: user.email, name: user.name, action: 'delete', payload: { id } })
-          })
+          auth.currentUser?.getIdToken().then(token => {
+            fetch('/api/db/playlists', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify({ action: 'delete', payload: { id } }) // uid dihapus
+            })
+          }).catch(console.error)
         }
       },
 
@@ -79,11 +90,16 @@ export const usePlaylistStore = create<PlaylistState>()(
         })
         const user = useAuthStore.getState().user
         if (user) {
-          fetch('/api/db/playlists', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: user.id, email: user.email, name: user.name, action: 'addSong', payload: { playlistId, song } })
-          })
+          auth.currentUser?.getIdToken().then(token => {
+            fetch('/api/db/playlists', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify({ action: 'addSong', payload: { playlistId, song } }) // uid dihapus
+            })
+          }).catch(console.error)
         }
       },
 
@@ -95,15 +111,20 @@ export const usePlaylistStore = create<PlaylistState>()(
         })
         const user = useAuthStore.getState().user
         if (user) {
-          fetch('/api/db/playlists', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: user.id, email: user.email, name: user.name, action: 'removeSong', payload: { playlistId, songId } })
-          })
+          auth.currentUser?.getIdToken().then(token => {
+            fetch('/api/db/playlists', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify({ action: 'removeSong', payload: { playlistId, songId } }) // uid dihapus
+            })
+          }).catch(console.error)
         }
       },
 
-      clear: () => set({ playlists: [] }), // <-- Untuk logout
+      clear: () => set({ playlists: [] }),
       
       get: (id) => get().playlists.find((p) => p.id === id),
       
@@ -111,10 +132,14 @@ export const usePlaylistStore = create<PlaylistState>()(
         const user = useAuthStore.getState().user
         if (!user) return
         
-        set({ playlists: [] }) // Kosongkan dulu
+        set({ playlists: [] })
         
         try {
-          const res = await fetch(`/api/db/playlists?uid=${user.id}`)
+          const token = await auth.currentUser?.getIdToken()
+          // uid dihapus dari URL
+          const res = await fetch(`/api/db/playlists`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
           const json = await res.json()
           if (json.success) {
             set({ playlists: json.data })

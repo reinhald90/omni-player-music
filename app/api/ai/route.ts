@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { adminAuth } from '@/lib/firebase-admin'
+import { rateLimit } from '@/lib/rateLimit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// Daftar model valid sesuai katalog Relay (codex-relay.codes)
 const ALLOWED_MODELS = new Set([
   'gpt-6.1-sol',
   'claude-opus-5-5',
@@ -12,7 +13,33 @@ const ALLOWED_MODELS = new Set([
 
 const DEFAULT_MODEL = 'gpt-6.1-sol'
 
+async function getVerifiedUid(req: NextRequest): Promise<string | null> {
+  try {
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return null
+    if (!adminAuth) return null
+    const token = authHeader.split('Bearer ')[1]
+    const decodedToken = await adminAuth.verifyIdToken(token)
+    return decodedToken.uid
+  } catch (error) {
+    return null
+  }
+}
+
 export async function POST(req: NextRequest) {
+  // 🛡️ 1. WAJIB LOGIN
+  const realUid = await getVerifiedUid(req)
+  if (!realUid) {
+    return NextResponse.json({ error: 'Unauthorized. Silakan login terlebih dahulu.' }, { status: 401 })
+  }
+
+  // 🛡️ 2. RATE LIMIT (Maks 10 request per menit per user)
+  // Mencegah user nge-spam chat terus-terusan
+  const isAllowed = rateLimit(realUid, 10, 60000)
+  if (!isAllowed) {
+    return NextResponse.json({ error: 'Terlalu banyak permintaan. Harap tunggu sebentar.' }, { status: 429 })
+  }
+
   try {
     const { messages, model } = await req.json()
 
@@ -23,14 +50,13 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.OPENAI_API_KEY
     const baseUrl = (process.env.OPENAI_BASE_URL || 'https://codex-relay.codes/v1').replace(/\/$/, '')
 
-    // Validasi model: jika tidak ada / tidak dikenal → pakai default
     const selectedModel = ALLOWED_MODELS.has(model) ? model : DEFAULT_MODEL
 
     if (!apiKey) {
       return NextResponse.json({ error: 'API Key belum diatur di server' }, { status: 500 })
     }
 
-    console.log(`[AI] Request ke model: ${selectedModel} via ${baseUrl}`)
+    console.log(`[AI] Request ke model: ${selectedModel} via ${baseUrl} oleh ${realUid}`)
 
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',

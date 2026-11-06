@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/store/authStore'
 import { usePlayerStore } from '@/store/playerStore'
+import { auth } from '@/lib/firebase' // ⬅️ TAMBAHAN: Import Firebase Auth
 import { 
   Send, 
   BadgeCheck, 
@@ -81,7 +82,11 @@ export default function GlobalChatPage() {
   const fetchMessages = async (isFirstLoad = false) => {
     if (!user) return
     try {
-      const res = await fetch(`/api/db/chat?uid=${user.id}`)
+      // ⬅️ UID DIHAPUS DARI URL, DIGANTI TOKEN
+      const token = await auth.currentUser?.getIdToken()
+      const res = await fetch(`/api/db/chat`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
       const json = await res.json()
       if (json.success) {
         setMessages(json.data)
@@ -149,15 +154,22 @@ export default function GlobalChatPage() {
     if (file.size > 10 * 1024 * 1024) return alert('Ukuran file maksimal 10MB')
     setUploadingMedia(true)
     try {
+      // ⬅️ TAMBAHKAN BEARER TOKEN UNTUK UPLOAD
+      const token = await auth.currentUser?.getIdToken()
       const formData = new FormData()
       formData.append('file', file)
       formData.append('type', 'chat_media')
-      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      
+      const res = await fetch('/api/upload', { 
+        method: 'POST', 
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData 
+      })
       const json = await res.json()
       if (json.success) {
         setSelectedMedia({ url: json.url, type: file.type.startsWith('video') ? 'video' : 'image' })
       } else {
-        alert('Gagal mengunggah media')
+        alert(json.error || 'Gagal mengunggah media')
       }
     } catch (err) {
       alert('Terjadi kesalahan saat mengunggah')
@@ -181,6 +193,7 @@ export default function GlobalChatPage() {
     setReplyTo(null)
     setShowEmoji(false)
 
+    // Pesan sementara (Optimistic UI) untuk tampilan lokal
     const tempMsg: ChatMessage = {
       id: 'temp-' + Date.now(),
       user_id: user.id,
@@ -201,14 +214,16 @@ export default function GlobalChatPage() {
     scrollToBottom()
 
     try {
+      // ⬅️ UID, NAMA, AVATAR DIHAPUS DARI BODY. TAMBAHKAN TOKEN.
+      const token = await auth.currentUser?.getIdToken()
       await fetch('/api/db/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
-          uid: user.id,
-          name: user.name,
-          avatar: user.avatar,
-          isVerified: user.isVerified,
+          // Server akan mengambil identitas asli dari token
           message: msgText,
           replyToId: currentReply?.id,
           replyToName: currentReply?.user_name,

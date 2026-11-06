@@ -1,32 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
+import { adminAuth } from '@/lib/firebase-admin'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+async function getVerifiedUid(req: NextRequest): Promise<string | null> {
+  try {
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return null
+    if (!adminAuth) return null
+    const token = authHeader.split('Bearer ')[1]
+    const decodedToken = await adminAuth.verifyIdToken(token)
+    return decodedToken.uid
+  } catch (error) {
+    return null
+  }
+}
 
 export async function GET(req: NextRequest) {
-  const uid = req.nextUrl.searchParams.get('uid')
-  if (!uid) return NextResponse.json({ error: 'UID required' }, { status: 400 })
+  const realUid = await getVerifiedUid(req)
+  if (!realUid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    const userRes = await sql`SELECT id FROM users WHERE firebase_uid = ${uid}`
+    const userRes = await sql`SELECT id FROM users WHERE firebase_uid = ${realUid}`
     if (userRes.length === 0) return NextResponse.json({ success: true, data: [] })
     const userId = userRes[0].id
 
-    // Ambil playlists dan lagunya
     const playlists = await sql`SELECT * FROM playlists WHERE user_id = ${userId} ORDER BY created_at DESC`
     const pIds = playlists.map(p => p.id)
     
     let songs: any[] = []
     if (pIds.length > 0) {
-      // Ambil semua lagu untuk playlist user ini
-      songs = await sql`
-        SELECT * FROM playlist_songs 
-        WHERE playlist_id = ANY(${pIds}) 
-        ORDER BY position ASC
-      `
+      songs = await sql`SELECT * FROM playlist_songs WHERE playlist_id = ANY(${pIds}) ORDER BY position ASC`
     }
 
-    // Gabungkan
     const data = playlists.map(p => ({
       id: p.id,
       name: p.name,
@@ -43,27 +51,19 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { uid, email, name, action, payload } = await req.json()
-  if (!uid) return NextResponse.json({ error: 'Missing UID' }, { status: 400 })
+  const realUid = await getVerifiedUid(req)
+  if (!realUid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // HAPUS uid, email, name dari body!
+  const { action, payload } = await req.json()
 
   try {
-    // 1. Dapatkan User ID
-    let userId;
-    const userRes = await sql`SELECT id FROM users WHERE firebase_uid = ${uid}`
-    if (userRes.length === 0) {
-      const newUser = await sql`INSERT INTO users (firebase_uid, email, name) VALUES (${uid}, ${email}, ${name}) RETURNING id`
-      userId = newUser[0].id
-    } else {
-      userId = userRes[0].id
-    }
+    const userRes = await sql`SELECT id FROM users WHERE firebase_uid = ${realUid}`
+    if (userRes.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    const userId = userRes[0].id
 
-    // 2. Action logic
     if (action === 'create') {
-      const res = await sql`
-        INSERT INTO playlists (user_id, name, description) 
-        VALUES (${userId}, ${payload.name}, ${payload.description || ''}) 
-        RETURNING id
-      `
+      const res = await sql`INSERT INTO playlists (user_id, name, description) VALUES (${userId}, ${payload.name}, ${payload.description || ''}) RETURNING id`
       return NextResponse.json({ success: true, newId: res[0].id })
     }
 
@@ -73,11 +73,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'addSong') {
-      // Pastikan playlist milik user ini
       const check = await sql`SELECT id FROM playlists WHERE id = ${payload.playlistId} AND user_id = ${userId}`
       if (check.length === 0) throw new Error('Unauthorized')
 
-      // Dapatkan posisi terakhir
       const posRes = await sql`SELECT MAX(position) as max_pos FROM playlist_songs WHERE playlist_id = ${payload.playlistId}`
       const nextPos = (posRes[0].max_pos || 0) + 1
 

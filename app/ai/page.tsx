@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
 import { usePlayerStore } from '@/store/playerStore'
+import { auth } from '@/lib/firebase' // ⬅️ TAMBAHAN: Import Firebase Auth
 import { Send, Bot, User, Loader2, ArrowLeft, Trash2, Copy, Check, ChevronDown, Cpu } from 'lucide-react'
 import { clsx } from 'clsx'
 import MarkdownRenderer from '@/components/ai/MarkdownRenderer'
@@ -14,7 +15,6 @@ interface Message {
   model?: string
 }
 
-// Model valid sesuai katalog Relay
 const MODELS = [
   { id: 'gpt-6.1-sol', name: 'GPT-6.1 Sol', desc: 'Cerdas & Serba Bisa' },
   { id: 'claude-opus-5-5', name: 'Claude Opus 5.5', desc: 'Analitis & Panjang' },
@@ -84,14 +84,19 @@ export default function AIPage() {
     setShowModelMenu(false)
 
     try {
-      // Kirim hanya pesan user/assistant ke API (buang pesan initial biar system prompt tetap dari server)
       const payloadMessages = newMessages
         .filter((m) => !(m.role === 'assistant' && m.content === INITIAL_MESSAGE.content))
         .map((m) => ({ role: m.role, content: m.content }))
 
+      // ⬅️ Ambil Bearer Token
+      const token = await auth.currentUser?.getIdToken()
+
       const res = await fetch('/api/ai', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}) // ⬅️ Tambahkan Bearer Token
+        },
         body: JSON.stringify({ messages: payloadMessages, model }),
       })
 
