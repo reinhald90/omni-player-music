@@ -19,16 +19,18 @@ async function getVerifiedUid(req: NextRequest): Promise<string | null> {
   }
 }
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
+const MAX_FILE_SIZE = 30 * 1024 * 1024 // 30MB (Disesuaikan dengan UI Upload)
 const ALLOWED_EXTENSIONS = [
+  // Audio
   'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac',
-  'jpg', 'jpeg', 'png', 'webp', 'gif', 'svg',
+  // Image (⛔ 'svg' dihapus karena rawan XSS)
+  'jpg', 'jpeg', 'png', 'webp', 'gif',
+  // Video
   'mp4', 'webm'
 ]
 
 export async function POST(req: NextRequest) {
   try {
-    // 🛡️ Wajib Login
     const realUid = await getVerifiedUid(req)
     if (!realUid) {
       return NextResponse.json({ success: false, error: 'Unauthorized. Silakan login.' }, { status: 401 })
@@ -42,15 +44,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'File tidak ditemukan' }, { status: 400 })
     }
 
-    // 🛡️ Validasi Ukuran
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ success: false, error: 'Maksimal file 20MB' }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Maksimal file 30MB' }, { status: 400 })
     }
 
-    // 🛡️ Validasi Ekstensi
     const ext = file.name.split('.').pop()?.toLowerCase() || 'mp4'
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      return NextResponse.json({ success: false, error: `Ekstensi .${ext} tidak diizinkan` }, { status: 400 })
+      return NextResponse.json({ success: false, error: `Ekstensi .${ext} tidak diizinkan (SVG dilarang demi keamanan)` }, { status: 400 })
     }
 
     const safeType = ['audio', 'cover', 'avatar', 'chat_media'].includes(type) ? type : 'other'

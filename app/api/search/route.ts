@@ -1,22 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import yts from 'yt-search'
 import type { Song } from '@/types'
-import { validateApiKey } from '@/lib/apiAuth'
+import { authenticateRequest } from '@/lib/apiAuth'
 import { rateLimit } from '@/lib/rateLimit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
-  const isAuthorized = await validateApiKey(req)
-  if (!isAuthorized) {
-    return NextResponse.json({ success: false, error: 'Akses Ditolak. API Key tidak valid.' }, { status: 401 })
+  // 1. VALIDASI IDENTITAS (Web Token atau API Key)
+  const auth = await authenticateRequest(req)
+  if (!auth.isValid) {
+    return NextResponse.json({ success: false, error: 'Akses Ditolak. Token atau API Key tidak valid.' }, { status: 401 })
   }
 
-  const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown'
-  const apiKey = req.headers.get('x-api-key') || req.nextUrl.searchParams.get('api_key')
-  const limitKey = apiKey || ip
-  const isAllowed = rateLimit(limitKey, 20, 60000)
+  // 2. RATE LIMIT BERDASARKAN IDENTITAS (Bukan IP)
+  // Jika web, limit berdasarkan UID user. Jika bot, limit berdasarkan UID pemilik API Key.
+  // Ini mencegah hacker ganti-ganti IP untuk bypass limit.
+  const limitKey = auth.uid || 'unknown'
+  const isAllowed = rateLimit(limitKey, 20, 60000) // 20 request per menit
 
   if (!isAllowed) {
     return NextResponse.json({ success: false, error: 'Terlalu banyak request. Coba lagi nanti.' }, { status: 429 })

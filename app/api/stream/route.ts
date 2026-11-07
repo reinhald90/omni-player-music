@@ -1,97 +1,100 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { validateApiKey } from '@/lib/apiAuth'
-import { rateLimit } from '@/lib/rateLimit'
+import { NextRequest } from 'next/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const PRIMARY_API = 'https://api.ikyyxd.my.id/search/ytplayv2'
-const CORS_PROXY = 'https://api.allorigins.win/raw?url='
+// 🛡️ WHITELIST DOMAIN (Hanya izinkan domain YouTube/Google)
+// Ini mencegah hacker memakai VPS-mu untuk menyerang situs lain
+const ALLOWED_DOMAINS = [
+  'googlevideo.com',
+  'youtube.com',
+  'ytimg.com',
+  'googleusercontent.com',
+  'ggpht.com'
+]
 
 export async function GET(req: NextRequest) {
-  console.log('[API Stream] Menerima request...')
+  const url = req.nextUrl.searchParams.get('url')
+  const isDownload = req.nextUrl.searchParams.get('download') === '1'
+  const filename = req.nextUrl.searchParams.get('filename') || 'audio.mp3'
 
-  // 1. CEK API KEY / BYPASS
-  const isAuthorized = await validateApiKey(req)
-  if (!isAuthorized) {
-    console.warn('[API Stream] ❌ Akses ditolak: API Key tidak valid.')
-    return NextResponse.json({ success: false, error: 'Akses Ditolak. API Key tidak valid.' }, { status: 401 })
+  if (!url) {
+    return new Response('Missing "url" parameter', { status: 400 })
   }
 
-  // 2. CEK RATE LIMIT
-  const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown'
-  const apiKey = req.headers.get('x-api-key') || req.nextUrl.searchParams.get('api_key')
-  const limitKey = apiKey || ip
-  
-  const isAllowed = rateLimit(limitKey, 30, 60000)
-  if (!isAllowed) {
-    console.warn('[API Stream] ❌ Rate limit tercapai.')
-    return NextResponse.json({ success: false, error: 'Terlalu banyak request. Coba lagi nanti.' }, { status: 429 })
-  }
+  // 🛡️ VALIDASI URL (Cek apakah URL valid dan domainnya ada di whitelist)
+  try {
+    const parsedUrl = new URL(url)
+    const hostname = parsedUrl.hostname.toLowerCase()
+    
+    const isAllowed = ALLOWED_DOMAINS.some(domain => 
+      hostname === domain || hostname.endsWith(`.${domain}`)
+    )
 
-  const q = req.nextUrl.searchParams.get('q')?.trim()
-  if (!q) return NextResponse.json({ success: false, error: 'Query kosong' }, { status: 400 })
+    if (!isAllowed) {
+      console.warn(`[Stream] Blocked SSRF attempt to: ${hostname}`)
+      return new Response('Domain tidak diizinkan', { status: 403 })
+    }
+  } catch (e) {
+    return new Response('Format URL tidak valid', { status: 400 })
+  }
 
   try {
-    let data = null
-    let errorMsg = ''
+    const range = req.headers.get('range')
 
-    console.log(`[API Stream] Mencari lagu: ${q}`)
-
-    // Coba Direct (Pakai fetch bawaan Node.js)
-    try {
-      const res = await fetch(`${PRIMARY_API}?q=${encodeURIComponent(q)}`)
-      if (res.ok) {
-        const json = await res.json()
-        if (json?.status && json?.result?.audio?.url) {
-          data = json
-          console.log('[API Stream] ✅ Direct API berhasil.')
-        } else {
-          errorMsg += 'Direct: Respon tidak valid. '
-          console.warn('[API Stream] ⚠️ Direct API merespon tapi data tidak valid:', JSON.stringify(json).slice(0, 200))
-        }
-      } else {
-        errorMsg += `Direct: HTTP ${res.status}. `
-        console.warn(`[API Stream] ⚠️ Direct API gagal dengan status: ${res.status}`)
-      }
-    } catch (e: any) {
-      errorMsg += `Direct: ${e.message}. `
-      console.warn('[API Stream] ⚠️ Direct API error:', e.message)
-    }
-
-    // Coba Proxy kalau direct gagal
-    if (!data) {
-      try {
-        const proxyUrl = `${CORS_PROXY}${encodeURIComponent(`${PRIMARY_API}?q=${encodeURIComponent(q)}`)}`
-        const res2 = await fetch(proxyUrl)
-        if (res2.ok) {
-          const json2 = await res2.json()
-          if (json2?.status && json2?.result?.audio?.url) {
-            data = json2
-            console.log('[API Stream] ✅ Proxy API berhasil.')
-          } else {
-            errorMsg += 'Proxy: Respon tidak valid. '
-          }
-        } else {
-          errorMsg += `Proxy: HTTP ${res2.status}. `
-        }
-      } catch (e: any) {
-        errorMsg += `Proxy: ${e.message}. `
-        console.warn('[API Stream] ⚠️ Proxy API error:', e.message)
-      }
-    }
-
-    if (!data) {
-      console.error('[API Stream] ❌ Gagal total:', errorMsg)
-      return NextResponse.json({ success: false, error: `API Error: ${errorMsg}` }, { status: 500 })
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: { audioUrl: data.result.audio.url, provider: 'ikyyxd' }
+    const upstream = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+        Accept: '*/*',
+        ...(range ? { Range: range } : {}),
+      },
     })
-  } catch (error: any) {
-    console.error('[API Stream] ❌ Fatal error:', error.message)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+
+    if (!upstream.ok && upstream.status !== 206) {
+      return new Response(`Upstream error ${upstream.status}`, {
+        status: upstream.status,
+      })
+    }
+
+    const headers = new Headers()
+    headers.set('Content-Type', upstream.headers.get('content-type') || 'audio/mpeg')
+    headers.set('Access-Control-Allow-Origin', '*')
+    headers.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
+    headers.set('Access-Control-Allow-Headers', 'Range')
+    headers.set('Accept-Ranges', 'bytes')
+    headers.set('Cache-Control', 'public, max-age=3600')
+
+    if (isDownload) {
+      const safeName = filename.replace(/[^\w\s.-]/g, '_').slice(0, 100)
+      headers.set(
+        'Content-Disposition',
+        `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`
+      )
+    }
+
+    const len = upstream.headers.get('content-length')
+    if (len) headers.set('Content-Length', len)
+
+    const cr = upstream.headers.get('content-range')
+    if (cr) headers.set('Content-Range', cr)
+
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers,
+    })
+  } catch (e: any) {
+    return new Response(`Proxy error: ${e.message}`, { status: 502 })
   }
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+      'Access-Control-Allow-Headers': 'Range',
+    },
+  })
 }
